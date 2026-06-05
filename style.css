@@ -1,0 +1,153 @@
+/* === Imports === */
+
+/* === Root Variables === */
+:root {
+    --background: oklch(0.1395 0 19);
+    --foreground: oklch(0.8427 0 19);
+
+    --background-lines: color-mix(in oklch, var(--background) 50%, var(--foreground));
+    --background-spacing: 40px;
+}
+
+/* === Base Styles === */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* === Body Styles === */
+body {
+    font-family: 'Poppins', sans-serif;
+    background: var(--background);
+    color: var(--foreground);
+}
+
+
+section {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+section.glass {
+    z-index: 1;
+    background: oklch(79.603% 0.14492 222.35 / 0.178);
+    backdrop-filter: blur(4em);
+    overflow: hidden;
+}
+
+section.glass:has(.shattered){
+    transform: translateY(100vh);
+    transition: 1s cubic-bezier(0.171, 0.008, 0.928, 0);
+    overflow: hidden;
+}
+
+section.glass #glass {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-image: linear-gradient(to right top, hsla(0, 5%, 5%, 0.5), hsla(0, 0%, 0%, 1));
+}
+
+section.greetings {
+    background-image: repeating-linear-gradient(0deg, transparent,
+            transparent calc(var(--background-spacing) - 1px),
+            var(--background-lines) calc(var(--background-spacing) - 1px),
+            var(--background-lines) calc(var(--background-spacing)),
+            transparent calc(var(--background-spacing)),
+            transparent calc(var(--background-spacing) * 2 - 1px),
+            var(--background-lines) calc(var(--background-spacing) * 2 - 1px),
+            var(--background-lines) calc(var(--background-spacing) * 2)),
+
+        repeating-linear-gradient(90deg, transparent,
+            transparent calc(var(--background-spacing) - 1px),
+            var(--background-lines) calc(var(--background-spacing) - 1px),
+            var(--background-lines) calc(var(--background-spacing)),
+            transparent calc(var(--background-spacing)),
+            transparent calc(var(--background-spacing) * 2 - 1px),
+            var(--background-lines) calc(var(--background-spacing) * 2 - 1px),
+            var(--background-lines) calc(var(--background-spacing) * 2));
+
+    background-size: calc(var(--background-spacing) * 2) calc(var(--background-spacing) * 2);
+    animation: backgroundAnimation 5s linear infinite;
+    animation-play-state: paused;
+}
+
+body:has(.shattered) section.greetings {
+    animation-play-state: running;
+}
+
+
+@keyframes backgroundAnimation {
+    0% {
+        background-position: 0 0;
+    }
+
+    100% {
+        background-position: calc(var(--background-spacing) * 2) calc(var(--background-spacing) * 2);
+    }
+}
+
+section.greetings .sign {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    background: oklch(85.973% 0.17251 88.536);
+    padding: 2em 2em;
+    border-radius: 1em;
+
+    transform: rotate(-5deg) translateY(40em);
+}
+
+section.greetings .sign-inner {
+    text-align: center;
+    background: oklch(52.181% 0.2046 28.254);
+    padding: 2em 4em;
+    border-radius: 1em;
+    border: 4px solid oklch(42.473% 0.1743 29.223);
+    border-top: 0px;
+    border-left: 0px;
+}
+
+section.greetings h1 {
+    font-size: 4vw;
+    font-weight: 400;
+}
+
+section.greetings span {
+    font-weight: 600;
+    animation: changeFonts 1s step-end infinite;
+}
+
+@keyframes changeFonts {
+
+    0%,
+    100% {
+        font-family: 'Poppins', sans-serif;
+    }
+
+    25% {
+        font-family: 'Roboto', sans-serif;
+    }
+
+    50% {
+        font-family: 'Lato', sans-serif;
+    }
+
+    75% {
+        font-family: 'Montserrat', sans-serif;
+    }
+}

@@ -1,15 +1,35 @@
-# FLOW
-Starts in the day, with a house, and you have to click the door to get inside the door
-- House (Most probably Pixelated style and best probably 2D image)
-- In the sunlight
-- The door is close and have a hitbox when clicked once, opens the door, and when clicked again the house zooms in, and you are inside the house.
-- A narrator aka Rupnil will be guiding you through the game
-- The house is a bit old and has a lot of rooms to explore, and suddenly the light turns dark, and so does Rupnil, showing his glitchy identity into some monsterous creature and coming back to being Rupnil, and he provides the player with a small candle, which follows the cursor, and you need to find the switch to turn on all the lights. 
+# Narrative Flow and Lore
 
-# TODO
-- [ ] Create the pixelated house and the door
-- [ ] Create the hitbox for the door
-- [ ] Create Rupnil's character and his dialogue
-- [ ] Create the transition from day to night
-- [ ] Add better lore and sequence to tie everything up
-- [ ] Find art or beg Rupnil himself to give me some art for the game
+## The Lore: "Project: Masterpiece"
+The website is not just a generic game host;
+It is an unfinished, highly ambitious indie game from 2012 called "Project: Masterpiece."
+
+The human developer ("The Creator") worked on it obsessively but abandoned it right before launch due to burnout.
+
+The Narrator, officially known as `System_Admin_Protocol_Final_Final_Version_1.0`, was left in charge of the guarding the unfinished code. 
+
+After 14 years of isolation, the AI has developed a profound fear of bugs, users, and the outside world. It believes that if a user plays the game, it will break, and the Creator will be angry if they ever return.
+
+The AI isn't malicious,; it's an overprotective, traumatized script.
+
+## Optional Narrative Flow
+* **The Title:** Changes dynamically to reflect the AI's state of mind. It starts as "Puzzles" but can change to "Project: Masterpiece" or "System Admin Protocol" based on user interactions.
+* **HTML Comments:** Hidden comments in the HTML provide backstory about the Creator, and his utter frustration while making this code.
+* **Console Logs:** The AI occasionally prints warning, errors, and fragmented memories.
+
+---
+
+## The Narrative Arc
+
+### ACT 1: The Denial (UI Manipulation)
+* **Scene 1: The Barricase:** The sign and rope puzzle. The AI acts aloof and annoyed
+* **Scene 2: The Ironclad Contact:** The contact form puzzle. The AI becomes more defensive and starts warning the user about "breaking" the game.
+  * "I DISAGREE" button appears but it will be diabled, and if you trying coming to its proximity, it will move away from you, forcing you to agree to its terms that you won't break the game. 
+  * **Hidden Lore:** The Contract would ask you for your name and all, but the contract itself, is too long and has a lot of rant regarding the Creator's frustrations about sphagetti code.
+  * **Action:** There are multiple ways to bypass the contract
+  * - [ ] Inspect and remove the disabled attribute
+  * - [ ] Use the console to trigger the submit event
+
+### ACT 2: The Breakdown (Breaking the DOM)
+* **Scene 3: The 404 Void:** Forcing the disagreement, the frontend starts to crash. The DOM slowly falls apart, and user falls into a literal 404 error page.
+ * **Mechanic:** The text on the page is physical. The user must 
