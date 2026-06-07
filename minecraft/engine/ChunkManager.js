@@ -11,6 +11,8 @@ export class ChunkManager {
         this.meshes = new Map();
         this.pendingChunks = new Set();
 
+        this.freeBuffers = [];
+
         this.chunkWidth = 16;
         this.renderDistance = 2; // 5 x 5 grid of chunks around the player
 
@@ -53,22 +55,50 @@ export class ChunkManager {
                 const key = this.getChunkKey(cx, cz);
 
                 if (!this.chunks.has(key) && !this.pendingChunks.has(key)) {
-                    const distanceSquared = (x * x) + (z * z);
-                    chunksToLoad.push({ cx, cz, key, distanceSquared })
+                    const distancePacked = (x * x) + (z * z);
+                    chunksToLoad.push({ cx, cz, key, distancePacked })
                 }
             }
         }
 
-        chunksToLoad.sort((a, b) => a.distanceSquared - b.distanceSquared);
+        chunksToLoad.sort((a, b) => a.distancePacked - b.distancePacked);
 
         for (const target of chunksToLoad) {
             this.pendingChunks.add(target.key);
+
+            const bufferToRecycle = this.freeBuffers.length > 0 ? this.freeBuffers.pop() : null;
+
+            const transferList = bufferToRecycle ? [bufferToRecycle] : [];
+
             this.worker.postMessage({
                 cx: target.cx,
                 cz: target.cz,
                 chunkWidth: this.chunkWidth,
-                chunkHeight: 128
-            })
+                chunkHeight: 128,
+                recycledBuffer: bufferToRecycle
+            }, transferList);
+        }
+
+        const unloadRadius = this.renderDistance + 2;
+
+        for (const key of this.chunks.keys()) {
+            const [cx, cz] = key.split(',').map(Number);
+
+            const distanceX = Math.abs(cx - currentCX);
+            const distanceZ = Math.abs(cz - currentCZ);
+
+            if (distanceX > unloadRadius || distanceZ > unloadRadius) {
+                if (this.meshes.has(key)) {
+                    const gpuResource = this.meshes.get(key);
+                    this.renderer.deleteMesh(gpuResource.gpuMesh);
+                    this.meshes.delete(key);
+                }
+
+                const chunkToDelete = this.chunks.get(key);
+                this.freeBuffers.push(chunkToDelete.data.buffer);
+
+                this.chunks.delete(key);
+            }
         }
     }
 
@@ -95,29 +125,27 @@ export class ChunkManager {
 
         const meshData = chunk.buildMesh(this, cx, cz);
 
-        const vertexData = [];
+        const vertexArray = new Uint32Array(meshData.packedData);
+        const indexArray = new Uint32Array(meshData.indices);
 
-        for (let i = 0; i < meshData.positions.length / 3; i++) {
-            vertexData.push(
-                meshData.positions[i * 3],
-                meshData.positions[i * 3 + 1],
-                meshData.positions[i * 3 + 2],
-
-                meshData.uvs[i * 3],
-                meshData.uvs[i * 3 + 1],
-                meshData.uvs[i * 3 + 2],
-            )
+        // If the chunk is completely empty.
+        if (indexArray.length === 0) {
+            if (this.meshes.has(key)) {
+                this.renderer.deleteMesh(this.meshes.get(key).gpuMesh);
+                this.meshes.delete(key);
+            }
+            return;
         }
 
         if (this.meshes.has(key)) {
             const gpuResource = this.meshes.get(key);
             this.renderer.updateMesh(
                 gpuResource.gpuMesh,
-                new Float32Array(vertexData),
-                new Uint32Array(meshData.indices)
+                vertexArray,
+                indexArray
             )
         } else {
-            const mesh = this.renderer.createMesh(new Float32Array(vertexData), new Uint32Array(meshData.indices));
+            const mesh = this.renderer.createMesh(vertexArray, indexArray);
             const modelMatrix = new Float32Array([
                 1, 0, 0, 0,
                 0, 1, 0, 0,
@@ -128,9 +156,37 @@ export class ChunkManager {
         }
     }
 
-    draw(sunDirection) {
-        for (const { gpuMesh, model } of this.meshes.values()) {
-            this.renderer.drawMesh(gpuMesh, model, sunDirection);
+    draw(sunDirection, cameraPos, cameraYaw) {
+        const camForwardX = -Math.sin(cameraYaw);
+        const camForwardZ = -Math.cos(cameraYaw);
+
+        const chunksToDraw = [];
+
+        for (const { gpuMesh, model, cx, cz } of this.meshes.values()) {
+            const chunkCenterX = cx * this.chunkWidth + this.chunkWidth / 2;
+            const chunkCenterZ = cz * this.chunkWidth + this.chunkWidth / 2;
+
+            const dx = chunkCenterX - cameraPos[0];
+            const dz = chunkCenterZ - cameraPos[2];
+
+            const distance = Math.hypot(dx, dz);
+
+            if (distance > this.chunkWidth * 1.5) {
+                const dirX = dx / distance;
+                const dirZ = dz / distance;
+
+                const dot = (dirX * camForwardX) + (dirZ * camForwardZ);
+
+                if (dot < 0.2) continue;
+            }
+
+            chunksToDraw.push({ gpuMesh, model, distance });
+        }
+
+        chunksToDraw.sort((a, b) => a.distance - b.distance);
+
+        for (const chunk of chunksToDraw) {
+            this.renderer.drawMesh(chunk.gpuMesh, chunk.model, sunDirection);
         }
     }
 

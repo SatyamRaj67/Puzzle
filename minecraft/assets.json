@@ -4,19 +4,31 @@
         "textures/grass_block_top.png",
         "textures/grass_block_side.png",
         "textures/dirt.png",
-        "textures/stone.png"
+        "textures/stone.png",
+        "textures/oak_log_top.png",
+        "textures/oak_log.png",
+        "textures/oak_leaves.png"
     ],
     "blocks": {
-        "1": {
+        "grass": {
             "Top": 1,
             "Bottom": 3,
             "Side": 2
         },
-        "2": {
+        "dirt": {
             "All": 3
         },
-        "3": {
+        "stone": {
             "All": 4
+        },
+        "oak_log": {
+            "Top": 5,
+            "Bottom": 5,
+            "Side": 6
+        },
+        "oak_leaves": {
+            "All": 7,
+            "transparent": true
         }
     },
     "system": {

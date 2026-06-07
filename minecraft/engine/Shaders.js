@@ -1,6 +1,6 @@
 export const vertexShaderSource = `#version 300 es
-in vec3 a_position;
-in vec3 a_uv;
+in uint a_data1;
+in uint a_data2;
 
 uniform mat4 u_projection;
 uniform mat4 u_view;
@@ -10,10 +10,23 @@ out vec3 v_uv;
 out vec3 v_worldPos;
 
 void main() {
-    vec4 worldPosition = u_model * vec4(a_position, 1.0);
+    // === BITWISE UNPACKING ===
+    float x = float(a_data1 & 31u);                 // Bits 0-4
+    float y = float((a_data1 >> 5u) & 255u);  // Bits 5-12
+    float z = float((a_data1 >> 13u) & 31u); // Bits 13-17
+
+    float u = float((a_data1 >> 18u) & 31u);           // Bits 18-22
+    float v = float((a_data1 >> 23u) & 255u);         // Bits 22-30
+
+    float layer = float(a_data2 & 255u);
+
+    vec3 pos = vec3(x, y, z);
+
+    vec4 worldPosition = u_model * vec4(pos, 1.0);
     gl_Position = u_projection * u_view * worldPosition;
-    v_uv = a_uv;
+    
     v_worldPos = worldPosition.xyz;
+    v_uv = vec3(u, v, layer);
 }
 `
 
@@ -33,6 +46,8 @@ out vec4 outColor;
 void main() {
     vec4 texColor = texture(u_texture, v_uv);
 
+    if (texColor.a < 0.1) discard;
+
     vec3 normal = normalize(cross(dFdx(v_worldPos), dFdy(v_worldPos)));
     vec3 sunDir = normalize(u_sunDirection);
 
@@ -46,6 +61,39 @@ void main() {
 
     outColor = vec4(texColor.rgb * lightIntensity, texColor.a * u_alpha);
 }
+`
+
+export const highlightVertexShaderSource = `#version 300 es
+in vec3 a_position;
+in vec3 a_uv;
+
+uniform mat4 u_projection;
+uniform mat4 u_view;
+uniform mat4 u_model;
+
+out vec3 v_uv;
+
+void main() {
+    gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+    v_uv = a_uv;
+}
+`
+
+export const highlightFragmentShaderSource = `#version 300 es
+precision highp float;
+precision highp sampler2DArray;
+
+in vec3 v_uv;
+
+uniform sampler2DArray u_texture;
+uniform float u_alpha;
+
+out vec4 outColor;
+
+void main() {
+    vec4 texColor = texture(u_texture, v_uv);    
+    outColor = vec4(texColor.rgb, texColor.a * u_alpha);
+}   
 `
 
 export const skyVertexShaderSource = `#version 300 es

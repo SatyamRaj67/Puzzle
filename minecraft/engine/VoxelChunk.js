@@ -1,14 +1,17 @@
-// Block IDs
-// 0: AIR
-// 1: GRASS
-// 2: DIRT
-// 3: STONE
-
 export class VoxelChunk {
-    constructor(width = 16, height = 128) {
+    constructor(width = 16, height = 128, existingBuffer = null) {
         this.width = width;
         this.height = height;
-        this.data = new Uint8Array(this.width * this.height * this.width);
+
+        if (existingBuffer) {
+            this.data = new Uint8Array(existingBuffer);
+        } else {
+            this.data = new Uint8Array(width * height * width);
+        }
+    }
+
+    reset() {
+        this.data.fill(0);
     }
 
     getIndex(x, y, z) { return x + (y * this.width) + (z * this.width * this.height); }
@@ -57,7 +60,7 @@ export class VoxelChunk {
     // ==========================================
 
     buildMesh(manager, cx, cz) {
-        const positions = [], indices = [], uvs = [];
+        const packedData = [], indices = [];
         let vertexCount = 0;
 
         const getSafeBlock = (x, y, z) => {
@@ -115,7 +118,19 @@ export class VoxelChunk {
 
                             const neighborBlock = getSafeBlock(neighborX, neighborY, neighborZ);
 
+                            let drawFace = false;
+
                             if (neighborBlock === 0) {
+                                drawFace = true; // Face is visible if neighbor is air
+                            } else if (neighborBlock !== currentBlock) {
+                                const neighborData = this.blockRegistry[neighborBlock];
+
+                                if (neighborData && neighborData.transparent) {
+                                    drawFace = true; // Face is visible if neighbor is a different transparent block
+                                }
+                            }
+
+                            if (drawFace) {
                                 mask[w + (h * wLimit)] = currentBlock;
                             }
                         }
@@ -151,7 +166,7 @@ export class VoxelChunk {
                             }
 
                             // Step C: Generate the 4 corners.
-                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, blockId, faceName, positions, indices, uvs, vertexCount);
+                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, blockId, faceName, packedData, indices, vertexCount);
                             vertexCount += 4;
 
                             // Step D: Zero-out the mask
@@ -167,17 +182,17 @@ export class VoxelChunk {
                 }
             }
         }
-        return { positions, indices, uvs };
+        return { packedData, indices };
     }
 
     //  --- PHASE 3: GENERATE THE GEOMETRY ---
-    generateOptimizedQuad(axis, dir, slice, w, h, width, height, blockId, faceName, positions, indices, uvs, vertexCount) {
+    generateOptimizedQuad(axis, dir, slice, w, h, width, height, blockId, faceName, packedData, indices, vertexCount) {
         const xOffset = axis.name === 'X' ? (dir === 1 ? 1 : 0) : 0;
         const yOffset = axis.name === 'Y' ? (dir === 1 ? 1 : 0) : 0;
         const zOffset = axis.name === 'Z' ? (dir === 1 ? 1 : 0) : 0;
 
         let texLayer = 0;
-      const blockData = this.blockRegistry[blockId.toString()];
+        const blockData = this.blockRegistry[blockId.toString()];
 
         if (blockData) {
             if (blockData[faceName] !== undefined) {
@@ -200,9 +215,18 @@ export class VoxelChunk {
             let finalY = (axis.name === 'Y') ? slice + yOffset : (axis.widthAxis === 'Y' ? cx : cy);
             let finalZ = (axis.name === 'Z') ? slice + zOffset : (axis.widthAxis === 'Z' ? cx : cy);
 
-            positions.push(finalX, finalY, finalZ);
+            // BITWISE PACKING
 
-            uvs.push(uvCoords[i][0], uvCoords[i][1], texLayer);
+            const data1 =
+                (finalX & 31) |                             // 5 bits for X (0-31)
+                ((finalY & 255) << 5) |                // 8 bits for Y (0-255)
+                ((finalZ & 31) << 13) |                // 5 bits for Z (0-31)
+                ((uvCoords[i][0] & 31) << 18) |  // 5 bits for U (0-31)
+                ((uvCoords[i][1] & 255) << 23);   // 8 bits for V (0-255)
+
+            const data2 = texLayer & 255; // 8 bits for texture layer (0-255)
+
+            packedData.push(data1, data2);
         }
 
         let flip = dir !== 1; // Flip the triangle order for back faces
@@ -223,7 +247,7 @@ export class VoxelChunk {
         }
     }
 
-    generateProceduralTerrain(noise, offsetX = 0, offsetZ = 0) {
+    generateProceduralTerrain(noise, offsetX = 0, offsetZ = 0, BLOCKS) {
         // FBM (Fractal Brownian Motion) parameters
         const octaves = 5;            // How many layers of noise to combine
         const persistence = 0.5;   // How much the amplitude decreases each layer
@@ -262,14 +286,14 @@ export class VoxelChunk {
                 const terrainHeight = Math.floor(baseHeight + sharpNoise * maxAmplitude);
 
                 for (let y = 0; y < this.height; y++) {
-                    this.setBlock(x, y, z, 0); // AIR
+                    this.setBlock(x, y, z, BLOCKS.AIR); // AIR
 
                     if (y < terrainHeight - 4) {
-                        this.setBlock(x, y, z, 3); // STONE
+                        this.setBlock(x, y, z, BLOCKS.STONE); // STONE
                     } else if (y < terrainHeight - 1) {
-                        this.setBlock(x, y, z, 2); // DIRT
+                        this.setBlock(x, y, z, BLOCKS.DIRT); // DIRT
                     } else if (y < terrainHeight) {
-                        this.setBlock(x, y, z, 1); // GRASS
+                        this.setBlock(x, y, z, BLOCKS.GRASS); // GRASS
                     }
                 }
             }

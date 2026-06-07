@@ -1,4 +1,4 @@
-import { vertexShaderSource, fragmentShaderSource, skyVertexShaderSource, skyFragmentShaderSource } from './Shaders.js';
+import { vertexShaderSource, fragmentShaderSource, skyVertexShaderSource, skyFragmentShaderSource, highlightVertexShaderSource, highlightFragmentShaderSource } from './Shaders.js';
 
 export class Renderer {
     constructor(canvas) {
@@ -12,14 +12,26 @@ export class Renderer {
 
         // Find attribute and uniform locations
         this.locations = {
-            position: this.gl.getAttribLocation(this.program, 'a_position'),
-            uv: this.gl.getAttribLocation(this.program, 'a_uv'),
+            data1: this.gl.getAttribLocation(this.program, 'a_data1'),
+            data2: this.gl.getAttribLocation(this.program, 'a_data2'),
             projection: this.gl.getUniformLocation(this.program, 'u_projection'),
             view: this.gl.getUniformLocation(this.program, 'u_view'),
             model: this.gl.getUniformLocation(this.program, 'u_model'),
             texture: this.gl.getUniformLocation(this.program, 'u_texture'),
             sun: this.gl.getUniformLocation(this.program, 'u_sunDirection')
         };
+
+        // Compile Highlight Program
+        this.highlightProgram = this.createProgram(highlightVertexShaderSource, highlightFragmentShaderSource);
+        this.highlightLocations = {
+            position: this.gl.getAttribLocation(this.highlightProgram, 'a_position'),
+            uv: this.gl.getAttribLocation(this.highlightProgram, 'a_uv'),
+            projection: this.gl.getUniformLocation(this.highlightProgram, 'u_projection'),
+            view: this.gl.getUniformLocation(this.highlightProgram, 'u_view'),
+            model: this.gl.getUniformLocation(this.highlightProgram, 'u_model'),
+            texture: this.gl.getUniformLocation(this.highlightProgram, 'u_texture'),
+            alpha: this.gl.getUniformLocation(this.highlightProgram, 'u_alpha')
+        }
 
         // Compile Sky Program
         this.skyProgram = this.createProgram(skyVertexShaderSource, skyFragmentShaderSource);
@@ -71,11 +83,13 @@ export class Renderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
 
-        const stride = 6 * 4;
-        this.gl.enableVertexAttribArray(this.locations.position);
-        this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
-        this.gl.enableVertexAttribArray(this.locations.uv);
-        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
+        const stride = 2 * 4; // 2 Integers * 4 bytes each
+
+
+        this.gl.enableVertexAttribArray(this.locations.data1);
+        this.gl.vertexAttribIPointer(this.locations.data1, 1, this.gl.UNSIGNED_INT, stride, 0);
+        this.gl.enableVertexAttribArray(this.locations.data2);
+        this.gl.vertexAttribIPointer(this.locations.data2, 1, this.gl.UNSIGNED_INT, stride, 4);
 
         const ebo = this.gl.createBuffer();
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ebo);
@@ -103,6 +117,12 @@ export class Renderer {
         this.gl.drawElements(this.gl.TRIANGLES, mesh.indexCount, this.gl.UNSIGNED_INT, 0);
     }
 
+    deleteMesh(mesh) {
+        this.gl.deleteVertexArray(mesh.vao);
+        this.gl.deleteBuffer(mesh.vbo);
+        this.gl.deleteBuffer(mesh.ebo);
+    }
+
     setupHighlight() {
         this.highlightVao = this.gl.createVertexArray();
         this.gl.bindVertexArray(this.highlightVao);
@@ -114,11 +134,11 @@ export class Renderer {
 
         const stride = 6 * 4; // 3 positions + 3 uv coordinates = 6 floats * 4 bytes per float
 
-        this.gl.enableVertexAttribArray(this.locations.position);
-        this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
+        this.gl.enableVertexAttribArray(this.highlightLocations.position);
+        this.gl.vertexAttribPointer(this.highlightLocations.position, 3, this.gl.FLOAT, false, stride, 0);
 
-        this.gl.enableVertexAttribArray(this.locations.uv);
-        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
+        this.gl.enableVertexAttribArray(this.highlightLocations.uv);
+        this.gl.vertexAttribPointer(this.highlightLocations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
 
         this.highlightEbo = this.gl.createBuffer();
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.highlightEbo);
@@ -129,6 +149,8 @@ export class Renderer {
     }
 
     drawHighlight(projMatrix, viewMatrix, hitX, hitY, hitZ, normal, layerId) {
+        this.gl.useProgram(this.highlightProgram);
+
         const offset = 0.005;
 
         const px = hitX + 0.5 + normal[0] * (0.5 + offset);
@@ -171,7 +193,7 @@ export class Renderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.highlightVbo);
         this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, vData);
 
-        const alphaLoc = this.gl.getUniformLocation(this.program, 'u_alpha');
+        const alphaLoc = this.gl.getUniformLocation(this.highlightProgram, 'u_alpha');
         this.gl.uniform1f(alphaLoc, 0.3);
 
         const model = new Float32Array(
@@ -183,17 +205,15 @@ export class Renderer {
             ]
         );
 
-        this.gl.uniformMatrix4fv(this.locations.projection, false, projMatrix);
-        this.gl.uniformMatrix4fv(this.locations.view, false, viewMatrix);
-        this.gl.uniformMatrix4fv(this.locations.model, false, model);
+        this.gl.uniformMatrix4fv(this.highlightLocations.projection, false, projMatrix);
+        this.gl.uniformMatrix4fv(this.highlightLocations.view, false, viewMatrix);
+        this.gl.uniformMatrix4fv(this.highlightLocations.model, false, model);
 
         this.gl.disable(this.gl.CULL_FACE);
-
         this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
-
         this.gl.enable(this.gl.CULL_FACE);
 
-        this.gl.uniform1f(alphaLoc, 1.0);
+        this.gl.useProgram(this.program);
     }
 
     createTextureArrayFromImage(images, textureSize) {
@@ -227,9 +247,10 @@ export class Renderer {
         this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
 
         // Use nearest filtering for pixelated look
-        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST_MIPMAP_LINEAR);
         this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
 
+        this.gl.generateMipmap(this.gl.TEXTURE_2D_ARRAY);
         // Tell shader to use texture unit 0
         this.gl.uniform1i(this.locations.texture, 0);
     }

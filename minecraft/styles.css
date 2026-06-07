@@ -1,16 +1,16 @@
-*{
+* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-canvas{
+canvas {
     display: block;
     width: 100vw;
     height: 100vh;
 }
 
-.crosshair{
+.crosshair {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -21,13 +21,14 @@ canvas{
     mix-blend-mode: difference;
 }
 
-.crosshair::before, .crosshair::after{
+.crosshair::before,
+.crosshair::after {
     content: '';
     position: absolute;
     background-color: white;
 }
 
-.crosshair::before{
+.crosshair::before {
     width: 2px;
     height: 100%;
     left: 50%;
@@ -35,7 +36,7 @@ canvas{
     transform: translateX(-50%);
 }
 
-.crosshair::after{
+.crosshair::after {
     width: 100%;
     height: 2px;
     top: 50%;
@@ -43,7 +44,7 @@ canvas{
     transform: translateY(-50%);
 }
 
-#debug-hud{
+#debug-hud {
     position: absolute;
     top: 10px;
     left: 10px;
@@ -53,5 +54,118 @@ canvas{
     background-color: rgba(0, 0, 0, 0.5);
     padding: 10px;
     pointer-events: none;
-    display: none; 
+    display: none;
+}
+
+#pause-menu {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: sans-serif;
+    z-index: 10;
+}
+
+.menu-container {
+    background: #222;
+    padding: 2em;
+    width: 300px;
+    box-shadow: 0 0.5em 2em rgba(0, 0, 0, 0.5);
+}
+
+.menu-container h1 {
+    text-align: center;
+}
+
+.setting-group {
+    margin-bottom: 1.25em;
+}
+
+.setting-group label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5em;
+}
+
+input[type="range"] {
+    width: 100%;
+    cursor: pointer;
+}
+
+.btn-row {
+    display: flex;
+    gap: 0.5em;
+    margin-bottom: 0.5em;
+}
+
+button {
+    flex: 1;
+    padding: 0.5em;
+    cursor: pointer;
+    background: #444;
+    color: white;
+    border: 1px solid #666;
+    border-radius: 0.25em;
+}
+
+button:hover {
+    background: #555;
+}
+
+.primary-btn {
+    background: #4CAF50;
+    border-color: #45a049;
+    margin-top: 10px;
+}
+
+.primary-btn:hover {
+    background: #45a049;
+}
+
+.danger-btn {
+    background: #e74c3c;
+    border-color: #c0392b;
+}
+
+.danger-btn:hover {
+    background: #c0392b;
+}
+
+#hotbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border-radius: 5px;
+    pointer-events: none;
+    /* Let clicks pass through to the game */
+}
+
+.slot {
+    width: 40px;
+    height: 40px;
+    border: 2px solid #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: sans-serif;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.slot.active {
+    border-color: white;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
