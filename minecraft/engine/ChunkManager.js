@@ -14,7 +14,7 @@ export class ChunkManager {
         this.chunkWidth = 16;
         this.renderDistance = 2; // 5 x 5 grid of chunks around the player
 
-        this.worker = new Worker(new URL('./chunkWorker.js', import.meta.url), { type: 'module' });
+        this.worker = new Worker(new URL('./ChunkWorker.js', import.meta.url), { type: 'module' });
 
         this.worker.onmessage = (event) => {
             const { cx, cz, buffer } = event.data;
