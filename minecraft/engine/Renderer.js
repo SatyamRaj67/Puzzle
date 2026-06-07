@@ -18,7 +18,9 @@ export class Renderer {
             view: this.gl.getUniformLocation(this.program, 'u_view'),
             model: this.gl.getUniformLocation(this.program, 'u_model'),
             texture: this.gl.getUniformLocation(this.program, 'u_texture'),
-            sun: this.gl.getUniformLocation(this.program, 'u_sunDirection')
+            sun: this.gl.getUniformLocation(this.program, 'u_sunDirection'),
+            playerPos: this.gl.getUniformLocation(this.program, 'u_playerPos'),
+            holdingTorch: this.gl.getUniformLocation(this.program, 'u_holdingTorch')
         };
 
         // Compile Highlight Program
@@ -110,10 +112,14 @@ export class Renderer {
         mesh.indexCount = indexData.length;
     }
 
-    drawMesh(mesh, modelMatrix, sunDir) {
+    drawMesh(mesh, modelMatrix, sunDir, playerPos, holdingTorch) {
         this.gl.bindVertexArray(mesh.vao);
         this.gl.uniformMatrix4fv(this.locations.model, false, modelMatrix);
         this.gl.uniform3fv(this.locations.sun, sunDir);
+
+        this.gl.uniform3fv(this.locations.playerPos, playerPos);
+        this.gl.uniform1f(this.locations.holdingTorch, holdingTorch);
+
         this.gl.drawElements(this.gl.TRIANGLES, mesh.indexCount, this.gl.UNSIGNED_INT, 0);
     }
 

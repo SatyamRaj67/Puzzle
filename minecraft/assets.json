@@ -7,7 +7,8 @@
         "textures/stone.png",
         "textures/oak_log_top.png",
         "textures/oak_log.png",
-        "textures/oak_leaves.png"
+        "textures/oak_leaves.png",
+        "textures/glowstone.png"
     ],
     "blocks": {
         "grass": {
@@ -29,6 +30,10 @@
         "oak_leaves": {
             "All": 7,
             "transparent": true
+        },
+        "glowstone": {
+            "All": 8,
+            "light" : 15
         }
     },
     "system": {

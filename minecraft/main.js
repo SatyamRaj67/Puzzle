@@ -140,7 +140,7 @@ async function initGame() {
 
     const inventory = [
         BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE,
-        BLOCKS.OAK_LOG, BLOCKS.OAK_LEAVES, BLOCKS.AIR,
+        BLOCKS.OAK_LOG, BLOCKS.OAK_LEAVES, BLOCKS.GLOWSTONE,
         BLOCKS.AIR, BLOCKS.AIR, BLOCKS.AIR
     ]
 
@@ -206,6 +206,8 @@ async function initGame() {
 
                     if (camera.isFlying || !camera.isBlockInsidePlayer(placeX, placeY, placeZ)) {
                         chunkManager.setBlock(placeX, placeY, placeZ, selectedBlock);
+
+                        const blockData = assets.blocks[Object.keys(BLOCKS).find(key => BLOCKS[key] === selectedBlock).toLowerCase()];
                     } else {
                         return; // Prevent placing block inside player when not flying
                     }
@@ -262,7 +264,7 @@ async function initGame() {
         renderer.beginFrame(projection, view, [0, 0, 0]);
         renderer.drawSkybox(projection, view, sunDirection)
 
-        chunkManager.draw(sunDirection, camera.getCameraPosition(), camera.yaw);
+        chunkManager.draw(sunDirection, camera.getCameraPosition(), camera.yaw, inventory[activeSlot]);
 
         const rayDirection = camera.getRay();
         const cameraOrigin = camera.getCameraPosition();

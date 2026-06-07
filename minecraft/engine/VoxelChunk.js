@@ -3,11 +3,7 @@ export class VoxelChunk {
         this.width = width;
         this.height = height;
 
-        if (existingBuffer) {
-            this.data = new Uint8Array(existingBuffer);
-        } else {
-            this.data = new Uint8Array(width * height * width);
-        }
+        this.data = new Uint16Array(existingBuffer ? existingBuffer : (width * height * width));
     }
 
     reset() {
@@ -23,7 +19,7 @@ export class VoxelChunk {
         }
 
         const index = this.getIndex(x, y, z);
-        this.data[index] = blockId;
+        this.data[index] = (this.data[index] & 0xFF00) | blockId;
     }
 
     getBlock(x, y, z) {
@@ -33,7 +29,25 @@ export class VoxelChunk {
         }
 
         const index = this.getIndex(x, y, z);
-        return this.data[index];
+        return this.data[index] & 0x00FF;
+    }
+
+    setLight(x, y, z, lightValue) {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height || z < 0 || z >= this.width) {
+            throw new Error("Block coordinates out of bounds");
+        }
+
+        const index = this.getIndex(x, y, z);
+        this.data[index] = (this.data[index] & 0xF0FF) | (lightValue << 8);
+    }
+
+    getLight(x, y, z) {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height || z < 0 || z >= this.width) {
+            return 0; // Return 0 for out-of-bounds blocks (no light)
+        }
+
+        const index = this.getIndex(x, y, z);
+        return (this.data[index] >> 8) & 0x000F;
     }
 
     generateFlatTerrain(groundHeight) {
@@ -76,6 +90,20 @@ export class VoxelChunk {
             }
 
             return 0; // Default to AIR for out-of-bounds
+        }
+
+        const getSafeLight = (x, y, z) => {
+            if (x >= 0 && x < this.width && y >= 0 && y < this.height && z >= 0 && z < this.width) {
+                return this.getLight(x, y, z);
+            }
+
+            if (manager) {
+                const globalX = x + (cx * this.width);
+                const globalZ = z + (cz * this.width);
+
+                return manager.getLight(globalX, y, globalZ);
+            }
+            return 0; // Default to no light for out-of-bounds
         }
 
         const axes = [
@@ -131,7 +159,9 @@ export class VoxelChunk {
                             }
 
                             if (drawFace) {
-                                mask[w + (h * wLimit)] = currentBlock;
+                                const neighborLight = getSafeLight(neighborX, neighborY, neighborZ);
+
+                                mask[w + (h * wLimit)] = currentBlock | (neighborLight << 8); // Pack block ID and light level together for later use
                             }
                         }
                     }
@@ -141,9 +171,11 @@ export class VoxelChunk {
 
                     for (let h = 0; h < this.height; h++) {
                         for (let w = 0; w < this.width; w++) {
-                            const blockId = mask[w + (h * this.width)];
+                            const maskVal = mask[w + (h * this.width)];
 
-                            if (blockId === 0) continue; // Skip empty cells
+                            if (maskVal === 0) continue; // Skip empty cells
+
+                            const blockId = maskVal & 0x00FF;
 
                             // Step A: Stretch the Width (Rightwards)
                             let width = 1;
@@ -166,7 +198,7 @@ export class VoxelChunk {
                             }
 
                             // Step C: Generate the 4 corners.
-                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, blockId, faceName, packedData, indices, vertexCount);
+                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount);
                             vertexCount += 4;
 
                             // Step D: Zero-out the mask
@@ -186,12 +218,16 @@ export class VoxelChunk {
     }
 
     //  --- PHASE 3: GENERATE THE GEOMETRY ---
-    generateOptimizedQuad(axis, dir, slice, w, h, width, height, blockId, faceName, packedData, indices, vertexCount) {
+    generateOptimizedQuad(axis, dir, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount) {
         const xOffset = axis.name === 'X' ? (dir === 1 ? 1 : 0) : 0;
         const yOffset = axis.name === 'Y' ? (dir === 1 ? 1 : 0) : 0;
         const zOffset = axis.name === 'Z' ? (dir === 1 ? 1 : 0) : 0;
 
         let texLayer = 0;
+
+        const blockId = maskVal & 0x00FF;
+        const lightValue = (maskVal >> 8) & 0x000F;
+
         const blockData = this.blockRegistry[blockId.toString()];
 
         if (blockData) {
@@ -224,7 +260,8 @@ export class VoxelChunk {
                 ((uvCoords[i][0] & 31) << 18) |  // 5 bits for U (0-31)
                 ((uvCoords[i][1] & 255) << 23);   // 8 bits for V (0-255)
 
-            const data2 = texLayer & 255; // 8 bits for texture layer (0-255)
+            const data2 = (texLayer & 255) | // 8 bits for texture layer (0-255)
+                ((lightValue & 15) << 8);          // 4 bits for light level (0-15)
 
             packedData.push(data1, data2);
         }

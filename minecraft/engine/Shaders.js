@@ -8,6 +8,7 @@ uniform mat4 u_model;
 
 out vec3 v_uv;
 out vec3 v_worldPos;
+out float v_light;
 
 void main() {
     // === BITWISE UNPACKING ===
@@ -19,6 +20,8 @@ void main() {
     float v = float((a_data1 >> 23u) & 255u);         // Bits 22-30
 
     float layer = float(a_data2 & 255u);
+
+    v_light = float((a_data2 >> 8u) & 15u) / 15.0; // Bits 8-11
 
     vec3 pos = vec3(x, y, z);
 
@@ -36,10 +39,13 @@ precision highp sampler2DArray;
 
 in vec3 v_uv;
 in vec3 v_worldPos;
+in float v_light;
 
 uniform sampler2DArray u_texture;
 uniform float u_alpha;
+uniform float u_holdingTorch;
 uniform vec3 u_sunDirection;
+uniform vec3 u_playerPos;
 
 out vec4 outColor;
 
@@ -50,14 +56,18 @@ void main() {
 
     vec3 normal = normalize(cross(dFdx(v_worldPos), dFdy(v_worldPos)));
     vec3 sunDir = normalize(u_sunDirection);
-
     float sunHeight = max(sunDir.y, 0.0);
 
     float diffuse = max(dot(normal, sunDir), 0.0) * sunHeight;
-
     float ambient = 0.05 + (0.25 * sunHeight);
 
-    float lightIntensity = diffuse + ambient;
+    float distToPlayer = distance(v_worldPos, u_playerPos);
+    float torchGlow = max(0.0, 1.0 - (distToPlayer / 12.0));
+    torchGlow = pow(torchGlow, 2.0);
+
+    float activeTorchLight = torchGlow * u_holdingTorch;
+
+    float lightIntensity = max(diffuse + ambient, max(v_light, activeTorchLight));
 
     outColor = vec4(texColor.rgb * lightIntensity, texColor.a * u_alpha);
 }

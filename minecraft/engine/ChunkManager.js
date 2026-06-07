@@ -24,7 +24,7 @@ export class ChunkManager {
 
             const chunk = new VoxelChunk(this.chunkWidth, 128);
             chunk.blockRegistry = this.blockRegistry;
-            chunk.data = new Uint8Array(buffer);
+            chunk.data = new Uint16Array(buffer);
 
             this.chunks.set(key, chunk);
             this.pendingChunks.delete(key);
@@ -156,7 +156,7 @@ export class ChunkManager {
         }
     }
 
-    draw(sunDirection, cameraPos, cameraYaw) {
+    draw(sunDirection, cameraPos, cameraYaw, activeSlotItem) {
         const camForwardX = -Math.sin(cameraYaw);
         const camForwardZ = -Math.cos(cameraYaw);
 
@@ -185,8 +185,16 @@ export class ChunkManager {
 
         chunksToDraw.sort((a, b) => a.distance - b.distance);
 
+        let isHoldingTorch = 0.0;
+
+        const heldBlockData = this.blockRegistry[activeSlotItem];
+
+        if (heldBlockData && heldBlockData.light) {
+            isHoldingTorch = heldBlockData.light / 15.0; // Normalize light level to [0, 1]
+        }
+
         for (const chunk of chunksToDraw) {
-            this.renderer.drawMesh(chunk.gpuMesh, chunk.model, sunDirection);
+            this.renderer.drawMesh(chunk.gpuMesh, chunk.model, sunDirection, cameraPos, isHoldingTorch);
         }
     }
 
@@ -210,18 +218,185 @@ export class ChunkManager {
 
         if (!this.chunks.has(key)) return; // Can't set block in an unloaded chunk
 
-        const chunk = this.chunks.get(key);
+        const oldBlockId = this.getBlock(worldX, worldY, worldZ);
+        const oldLight = this.getLight(worldX, worldY, worldZ);
+        const oldBlockData = this.blockRegistry[oldBlockId];
+        const oldEmittedLight = (oldBlockData && oldBlockData.light) ? oldBlockData.light : 0;
 
+        const chunk = this.chunks.get(key);
         const localX = worldX - (cx * this.chunkWidth);
         const localZ = worldZ - (cz * this.chunkWidth);
-
         chunk.setBlock(localX, worldY, localZ, blockId);
-        this.rebuildChunkMesh(cx, cz);
 
-        // Rebuild neighboring chunks if block is on the edge
+        const newBlockData = this.blockRegistry[blockId];
+        const isNewTransparent = blockId === 0 || (newBlockData && newBlockData.transparent);
+        const newEmittedLight = (newBlockData && newBlockData.light) ? newBlockData.light : 0;
+
+        if (oldEmittedLight > 0 || (!isNewTransparent && oldLight > 0)) {
+            const lightToRemove = Math.max(oldEmittedLight, oldLight);
+            this.removeLight(worldX, worldY, worldZ, lightToRemove);
+        }
+
+        if (newEmittedLight > 0) {
+            this.floodFillLight(worldX, worldY, worldZ, newEmittedLight);
+        } else if (isNewTransparent) {
+            const directions = [
+                [1, 0, 0],
+                [-1, 0, 0],
+                [0, 1, 0],
+                [0, -1, 0],
+                [0, 0, 1],
+                [0, 0, -1]
+            ]
+
+            let maxNeighborLight = 0;
+
+            for (const d of directions) {
+                const nx = worldX + d[0];
+                const ny = worldY + d[1];
+                const nz = worldZ + d[2];
+
+                const neighborLight = this.getLight(nx, ny, nz);
+                if (neighborLight > maxNeighborLight) {
+                    maxNeighborLight = neighborLight;
+                }
+            }
+
+            if (maxNeighborLight > 2) {
+                this.floodFillLight(worldX, worldY, worldZ, maxNeighborLight - 2);
+            }
+        }
+
+        this.rebuildChunkMesh(cx, cz);
         if (localX === 0) this.rebuildChunkMesh(cx - 1, cz);
         if (localX === this.chunkWidth - 1) this.rebuildChunkMesh(cx + 1, cz);
         if (localZ === 0) this.rebuildChunkMesh(cx, cz - 1);
         if (localZ === this.chunkWidth - 1) this.rebuildChunkMesh(cx, cz + 1);
+    }
+
+    getLight(worldX, worldY, worldZ) {
+        const cx = Math.floor(worldX / this.chunkWidth);
+        const cz = Math.floor(worldZ / this.chunkWidth);
+        const key = this.getChunkKey(cx, cz);
+
+        if (!this.chunks.has(key)) return 0; // If chunk unloaded, treat them as dark
+
+        const localX = worldX - (cx * this.chunkWidth);
+        const localZ = worldZ - (cz * this.chunkWidth);
+        return this.chunks.get(key).getLight(localX, worldY, localZ);
+    }
+
+    setLight(worldX, worldY, worldZ, lightLevel) {
+        const cx = Math.floor(worldX / this.chunkWidth);
+        const cz = Math.floor(worldZ / this.chunkWidth);
+        const key = this.getChunkKey(cx, cz);
+
+        if (!this.chunks.has(key)) return; // Can't set light in an unloaded chunk
+
+        const chunk = this.chunks.get(key);
+        const localX = worldX - (cx * this.chunkWidth);
+        const localZ = worldZ - (cz * this.chunkWidth);
+        chunk.setLight(localX, worldY, localZ, lightLevel);
+    }
+
+    removeLight(startX, startY, startZ, oldLight) {
+        const queue = [
+            { x: startX, y: startY, z: startZ, light: oldLight }
+        ]
+
+        const fillQueue = [];
+
+        const chunksToRebuild = new Set();
+
+        this.setLight(startX, startY, startZ, 0);
+
+        const directions = [
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [0, 0, 1],
+            [0, 0, -1]
+        ]
+
+        while (queue.length > 0) {
+            const { x, y, z, light } = queue.shift();
+
+            chunksToRebuild.add(`${Math.floor(x / this.chunkWidth)},${Math.floor(z / this.chunkWidth)}`);
+
+            for (const d of directions) {
+                const nx = x + d[0];
+                const ny = y + d[1];
+                const nz = z + d[2];
+
+                const neighborLight = this.getLight(nx, ny, nz);
+
+                if (neighborLight !== 0 && neighborLight < light) {
+                    this.setLight(nx, ny, nz, 0);
+                    queue.push({ x: nx, y: ny, z: nz, light: neighborLight });
+                }
+                else if (neighborLight >= light) {
+                    fillQueue.push({ x: nx, y: ny, z: nz, light: neighborLight });
+                }
+            }
+        }
+
+        for (const node of fillQueue) {
+            this.floodFillLight(node.x, node.y, node.z, node.light);
+        }
+
+        for (const key of chunksToRebuild) {
+            const [cx, cz] = key.split(',').map(Number);
+            this.rebuildChunkMesh(cx, cz);
+        }
+    }
+
+    floodFillLight(startX, startY, startZ, startLight) {
+        const queue = [{ x: startX, y: startY, z: startZ, light: startLight }];
+
+        this.setLight(startX, startY, startZ, startLight);
+
+        const directions = [
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [0, 0, 1],
+            [0, 0, -1]
+        ]
+
+        const chunksToRebuild = new Set();
+
+        while (queue.length > 0) {
+            const { x, y, z, light } = queue.shift();
+
+            chunksToRebuild.add(`${Math.floor(x / this.chunkWidth)},${Math.floor(z / this.chunkWidth)}`);
+
+            if (light <= 1) continue;
+
+            for (const d of directions) {
+                const nx = x + d[0];
+                const ny = y + d[1];
+                const nz = z + d[2];
+
+                const neighborBlock = this.getBlock(nx, ny, nz);
+
+                const blockData = this.blockRegistry[neighborBlock];
+
+                if (neighborBlock === 0 || (blockData && blockData.transparent)) {
+                    const currentNeighborLight = this.getLight(nx, ny, nz);
+
+                    if (currentNeighborLight < light - 2) {
+                        this.setLight(nx, ny, nz, light - 2);
+                        queue.push({ x: nx, y: ny, z: nz, light: light - 2 });
+                    }
+                }
+            }
+        }
+
+        for (const key of chunksToRebuild) {
+            const [cx, cz] = key.split(',').map(Number);
+            this.rebuildChunkMesh(cx, cz);
+        }
     }
 }
