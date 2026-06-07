@@ -27,7 +27,7 @@ export class Raycaster {
         // 5. The Core DDA Loop
         while (distance < maxDistance) {
             // Step A: Check if the current block is inside out chunk boundaries
-            if (x >= 0 && x < chunk.size && y >= 0 && y < chunk.size && z >= 0 && z < chunk.size) {
+            if (x >= 0 && x < chunk.width && y >= 0 && y < chunk.height && z >= 0 && z < chunk.width) {
                 const blockId = chunk.getBlock(x, y, z);
 
                 if (blockId !== 0) {

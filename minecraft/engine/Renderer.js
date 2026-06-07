@@ -13,10 +13,11 @@ export class Renderer {
         // Find attribute and uniform locations
         this.locations = {
             position: this.gl.getAttribLocation(this.program, 'a_position'),
-            color: this.gl.getAttribLocation(this.program, 'a_color'),
+            uv: this.gl.getAttribLocation(this.program, 'a_uv'),
             projection: this.gl.getUniformLocation(this.program, 'u_projection'),
             view: this.gl.getUniformLocation(this.program, 'u_view'),
-            model: this.gl.getUniformLocation(this.program, 'u_model')
+            model: this.gl.getUniformLocation(this.program, 'u_model'),
+            texture: this.gl.getUniformLocation(this.program, 'u_texture')
         };
 
         this.gl.enable(this.gl.DEPTH_TEST);
@@ -58,13 +59,13 @@ export class Renderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
 
-        const stride = 6 * 4; // 3 positions + 3 colors = 6 floats * 4 bytes per float
+        const stride = 6 * 4; // 3 positions + 3 uvs = 6 floats * 4 bytes per float
 
         this.gl.enableVertexAttribArray(this.locations.position);
         this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
 
-        this.gl.enableVertexAttribArray(this.locations.color);
-        this.gl.vertexAttribPointer(this.locations.color, 3, this.gl.FLOAT, false, stride, 3 * 4);
+        this.gl.enableVertexAttribArray(this.locations.uv);
+        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
 
         this.indexBuffer = this.gl.createBuffer();
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
@@ -108,13 +109,13 @@ export class Renderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.highlightVbo);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, 4 * 6 * 4, this.gl.DYNAMIC_DRAW);
 
-        const stride = 6 * 4; // 3 positions + 3 colors = 6 floats * 4 bytes per float
+        const stride = 6 * 4; // 3 positions + 3 uv coordinates = 6 floats * 4 bytes per float
 
         this.gl.enableVertexAttribArray(this.locations.position);
         this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
 
-        this.gl.enableVertexAttribArray(this.locations.color);
-        this.gl.vertexAttribPointer(this.locations.color, 3, this.gl.FLOAT, false, stride, 3 * 4);
+        this.gl.enableVertexAttribArray(this.locations.uv);
+        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
 
         this.highlightEbo = this.gl.createBuffer();
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.highlightEbo);
@@ -124,7 +125,7 @@ export class Renderer {
         this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
     }
 
-    drawHighlight(projMatrix, viewMatrix, hitX, hitY, hitZ, normal) {
+    drawHighlight(projMatrix, viewMatrix, hitX, hitY, hitZ, normal, layerId) {
         const offset = 0.005;
 
         const px = hitX + 0.5 + normal[0] * (0.5 + offset);
@@ -147,18 +148,20 @@ export class Renderer {
 
         // Generate 4 corners of the square
         const s = 0.505;
-        const vData = new Float32Array(24); // 4 vertices * (3 pos + 3 color)
+        const vData = new Float32Array(24); // 4 vertices * (3 pos + 3 uv)
         const corners = [
             [-1, -1], [1, -1], [1, 1], [-1, 1]
         ];
+
+        const uvCoords = [[0, 0], [1, 0], [1, 1], [0, 1]];
 
         for (let i = 0; i < 4; i++) {
             vData[i * 6 + 0] = px + tx[0] * corners[i][0] * s + ty[0] * corners[i][1] * s; // X
             vData[i * 6 + 1] = py + tx[1] * corners[i][0] * s + ty[1] * corners[i][1] * s; // Y
             vData[i * 6 + 2] = pz + tx[2] * corners[i][0] * s + ty[2] * corners[i][1] * s; // Z
-            vData[i * 6 + 3] = 1.0; // R
-            vData[i * 6 + 4] = 1.0; // G
-            vData[i * 6 + 5] = 1.0; // B
+            vData[i * 6 + 3] = uvCoords[i][0]; // R
+            vData[i * 6 + 4] = uvCoords[i][1]; // G
+            vData[i * 6 + 5] = layerId; // B (texture layer)
         }
 
         this.gl.bindVertexArray(this.highlightVao);
@@ -188,5 +191,72 @@ export class Renderer {
         this.gl.enable(this.gl.CULL_FACE);
 
         this.gl.uniform1f(alphaLoc, 1.0);
+    }
+
+    createTextureArray(pixelData, width, height, depth) {
+        const texture = this.gl.createTexture();
+
+        this.gl.activeTexture(this.gl.TEXTURE0);
+        this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texture);
+
+        this.gl.texImage3D(
+            this.gl.TEXTURE_2D_ARRAY,
+            0,
+            this.gl.RGBA,
+            width, height, depth,
+            0,
+            this.gl.RGBA,
+            this.gl.UNSIGNED_BYTE,
+            pixelData
+        );
+
+        // Tell GPU to repeat the texture when UVs go outside 0-1 range (for atlas)
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
+
+        // Use nearest filtering for pixelated look
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+
+        // Tell shader to use texture unit 0
+        this.gl.uniform1i(this.locations.texture, 0);
+    }
+
+    createTextureArrayFromImage(images, textureSize) {
+        const texture = this.gl.createTexture();
+        this.gl.activeTexture(this.gl.TEXTURE0);
+        this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texture);
+
+        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+
+        this.gl.texStorage3D(
+            this.gl.TEXTURE_2D_ARRAY,
+            1,
+            this.gl.RGBA8,
+            textureSize, textureSize, images.length
+        )
+
+        for (let i = 0; i < images.length; i++) {
+            this.gl.texSubImage3D(
+                this.gl.TEXTURE_2D_ARRAY,
+                0,              // Mipmap level
+                0, 0, i,        // X, Y, Z (Z being layer index)
+                textureSize, textureSize, 1, // Width, Height, Depth
+                this.gl.RGBA,
+                this.gl.UNSIGNED_BYTE,
+                images[i]
+            )
+        }
+
+        // Tell GPU to repeat the texture when UVs go outside 0-1 range (for atlas)
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
+
+        // Use nearest filtering for pixelated look
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+
+        // Tell shader to use texture unit 0
+        this.gl.uniform1i(this.locations.texture, 0);
     }
 }

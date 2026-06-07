@@ -1,0 +1,25 @@
+{
+    "textures": [
+        "textures/highlight.png",
+        "textures/grass_block_top.png",
+        "textures/grass_block_side.png",
+        "textures/dirt.png",
+        "textures/stone.png"
+    ],
+    "blocks": {
+        "1": {
+            "Top": 1,
+            "Bottom": 3,
+            "Side": 2
+        },
+        "2": {
+            "All": 3
+        },
+        "3": {
+            "All": 4
+        }
+    },
+    "system": {
+        "highlightLayer": 0
+    }
+}
