@@ -1,9 +1,10 @@
+import { ChunkManager } from "./engine/ChunkManager.js";
 import { FirstPersonCamera } from "./engine/FPCamera.js";
 import { Mat4 } from "./engine/Math.js";
 import { PerlinNoise } from "./engine/Noise.js";
 import { Raycaster } from "./engine/Raycaster.js";
 import { Renderer } from "./engine/Renderer.js";
-import { VoxelChunk } from "./VoxelChunk.js";
+import { VoxelChunk } from "./engine/VoxelChunk.js";
 
 
 const canvas = document.getElementById('gameCanvas');
@@ -36,39 +37,7 @@ async function initGame() {
 
     renderer.createTextureArrayFromImage(images, 16);
 
-    const chunk = new VoxelChunk(32);
-    chunk.blockRegistry = assets.blocks;
-
-    const worldNoise = new PerlinNoise();
-
-    chunk.generateProceduralTerrain(worldNoise, 0, 0);
-
-    const meshData = chunk.buildMesh();
-
-    console.log(`Sending ${meshData.positions.length / 3} vertices to GPU`);
-
-    const vertexData = [];
-
-    for (let i = 0; i < meshData.positions.length / 3; i++) {
-        // Add XYZ
-        vertexData.push(
-            meshData.positions[i * 3],
-            meshData.positions[(i * 3) + 1],
-            meshData.positions[(i * 3) + 2]
-        );
-        // Add UVs
-        vertexData.push(
-            meshData.uvs[i * 3],
-            meshData.uvs[(i * 3) + 1],
-            meshData.uvs[(i * 3) + 2]
-        );
-    }
-
-    // 3. Upload Mesh Data to GPU
-    renderer.setBufferData(
-        new Float32Array(vertexData),
-        new Uint32Array(meshData.indices)
-    );
+    const chunkManager = new ChunkManager(renderer, assets.blocks);
 
 
     // 4. Setup Matrices
@@ -82,36 +51,6 @@ async function initGame() {
         canvas.height = window.innerHeight;
         Mat4.perspective(projection, Math.PI / 4, canvas.width / canvas.height, 0.1, 1000.0);
     });
-
-    let indexCount = meshData.indices.length;
-    let vertexCount = vertexData.length / 6;
-
-    function rebuildAndSendToGPU() {
-        const newMeshData = chunk.buildMesh();
-        const newVertexData = [];
-
-        for (let i = 0; i < newMeshData.positions.length / 3; i++) {
-            // Add XYZ
-            newVertexData.push(
-                newMeshData.positions[i * 3],
-                newMeshData.positions[i * 3 + 1],
-                newMeshData.positions[i * 3 + 2]
-            )
-
-            // Add UVs
-            newVertexData.push(
-                newMeshData.uvs[i * 3],
-                newMeshData.uvs[i * 3 + 1],
-                newMeshData.uvs[i * 3 + 2]
-            )
-        }
-
-        renderer.updateBufferData(
-            new Float32Array(newVertexData),
-            new Uint32Array(newMeshData.indices)
-        );
-        indexCount = newMeshData.indices.length;
-    }
 
     let blockType = 2; // Default block type to place (e.g., dirt)
     window.addEventListener('keydown', (e) => {
@@ -135,12 +74,12 @@ async function initGame() {
             );
             const cameraOrigin = camera.getCameraPosition();
 
-            const hit = Raycaster.step(cameraOrigin, rayDirection, chunk, 100);
+            const hit = Raycaster.step(cameraOrigin, rayDirection, chunkManager, 8);
 
             if (hit) {
                 if (event.button === 2) {
                     // RIGHT CLICK: BREAK BLOCK
-                    chunk.setBlock(hit.x, hit.y, hit.z, 0);
+                    chunkManager.setBlock(hit.x, hit.y, hit.z, 0);
                 } else if (event.button === 0) {
                     // LEFT CLICK: PLACE BLOCK
                     const placeX = hit.x + hit.normal[0];
@@ -148,13 +87,11 @@ async function initGame() {
                     const placeZ = hit.z + hit.normal[2];
 
                     if (camera.isFlying || !camera.isBlockInsidePlayer(placeX, placeY, placeZ)) {
-                        chunk.setBlock(placeX, placeY, placeZ, blockType);
+                        chunkManager.setBlock(placeX, placeY, placeZ, blockType);
                     } else {
                         return; // Prevent placing block inside player when not flying
                     }
                 }
-
-                rebuildAndSendToGPU();
             }
         }
     })
@@ -167,15 +104,39 @@ async function initGame() {
     function animate() {
         requestAnimationFrame(animate);
 
-        camera.update(chunk);
+        const pos = camera.getCameraPosition();
+        chunkManager.update(pos[0], pos[2]);
+
+        camera.update(chunkManager);
         const view = camera.getViewMatrix();
 
-        renderer.draw(indexCount, projection, view, model);
+        // Calculate a rotating sun (1 full rotation every ~50 seconds)
+        const time = Math.PI / 4;
+
+        const sunDirection = [
+            Math.sin(time),
+            Math.cos(time),
+            0.5
+        ]
+
+        // Dynamic Sky Color (Interpolate between day and night colors based on sun height)
+        let skyR = 0.5, skyG = 0.7, skyB = 1.0; // Default Day Blue
+
+        if (sunDirection[1] < 0.2) {
+            const fade = Math.max(0, sunDirection[1] / 0.2);
+            skyR *= fade;
+            skyG *= fade;
+            skyB *= fade;
+        }
+
+        renderer.beginFrame(projection, view, [skyR, skyG, skyB]);
+
+        chunkManager.draw(sunDirection)
 
         const rayDirection = camera.getRay();
         const cameraOrigin = camera.getCameraPosition();
 
-        activehit = Raycaster.step(cameraOrigin, rayDirection, chunk, 100);
+        activehit = Raycaster.step(cameraOrigin, rayDirection, chunkManager, 8);
 
         if (activehit) {
             renderer.drawHighlight(projection, view, activehit.x, activehit.y, activehit.z, activehit.normal, assets.system.highlightLayer);

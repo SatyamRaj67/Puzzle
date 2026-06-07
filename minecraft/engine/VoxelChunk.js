@@ -56,9 +56,24 @@ export class VoxelChunk {
     // THE GREEDY MESHER
     // ==========================================
 
-    buildMesh() {
+    buildMesh(manager, cx, cz) {
         const positions = [], indices = [], uvs = [];
         let vertexCount = 0;
+
+        const getSafeBlock = (x, y, z) => {
+            if (x >= 0 && x < this.width && y >= 0 && y < this.height && z >= 0 && z < this.width) {
+                return this.getBlock(x, y, z);
+            }
+
+            if (manager) {
+                const globalX = x + (cx * this.width);
+                const globalZ = z + (cz * this.width);
+
+                return manager.getBlock(globalX, y, globalZ);
+            }
+
+            return 0; // Default to AIR for out-of-bounds
+        }
 
         const axes = [
             { name: 'Y', sliceDir: [0, 1, 0], widthAxis: 'X', heightAxis: 'Z' },
@@ -98,7 +113,7 @@ export class VoxelChunk {
                             const neighborY = y + (axis.name === 'Y' ? dirMultiplier : 0);
                             const neighborZ = z + (axis.name === 'Z' ? dirMultiplier : 0);
 
-                            const neighborBlock = this.getBlock(neighborX, neighborY, neighborZ);
+                            const neighborBlock = getSafeBlock(neighborX, neighborY, neighborZ);
 
                             if (neighborBlock === 0) {
                                 mask[w + (h * wLimit)] = currentBlock;
@@ -210,13 +225,14 @@ export class VoxelChunk {
 
     generateProceduralTerrain(noise, offsetX = 0, offsetZ = 0) {
         // FBM (Fractal Brownian Motion) parameters
-        const octaves = 4;            // How many layers of noise to combine
+        const octaves = 5;            // How many layers of noise to combine
         const persistence = 0.5;   // How much the amplitude decreases each layer
         const lacunarity = 2.0;     // How much the frequency increases each layer
-        const scale = 0.02;           // Base Zoom Level
 
-        const baseHeight = 4;     // Minimum terrain height
-        const maxAmplitude = 20;     // Maximum terrain height
+        const scale = 0.008;           // Base Zoom Level
+
+        const baseHeight = 10;     // Minimum terrain height
+        const maxAmplitude = 100;     // Maximum terrain height
 
         for (let x = 0; x < this.width; x++) {
             for (let z = 0; z < this.width; z++) {

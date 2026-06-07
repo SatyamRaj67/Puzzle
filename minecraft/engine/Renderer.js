@@ -17,7 +17,8 @@ export class Renderer {
             projection: this.gl.getUniformLocation(this.program, 'u_projection'),
             view: this.gl.getUniformLocation(this.program, 'u_view'),
             model: this.gl.getUniformLocation(this.program, 'u_model'),
-            texture: this.gl.getUniformLocation(this.program, 'u_texture')
+            texture: this.gl.getUniformLocation(this.program, 'u_texture'),
+            sun: this.gl.getUniformLocation(this.program, 'u_sunDirection')
         };
 
         this.gl.enable(this.gl.DEPTH_TEST);
@@ -49,55 +50,6 @@ export class Renderer {
         this.gl.linkProgram(program);
 
         return program;
-    }
-
-    setBufferData(vertexData, indexData) {
-        this.vao = this.gl.createVertexArray();
-        this.gl.bindVertexArray(this.vao);
-
-        this.buffer = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
-
-        const stride = 6 * 4; // 3 positions + 3 uvs = 6 floats * 4 bytes per float
-
-        this.gl.enableVertexAttribArray(this.locations.position);
-        this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
-
-        this.gl.enableVertexAttribArray(this.locations.uv);
-        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
-
-        this.indexBuffer = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
-    }
-
-    updateBufferData(vertexData, indexData) {
-        this.gl.bindVertexArray(this.vao);
-
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
-
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
-    }
-
-    draw(indexCount, projMatrix, viewMatrix, modelMatrix) {
-        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        this.gl.clearColor(0.1, 0.1, 0.1, 1.0);
-        this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-
-        this.gl.bindVertexArray(this.vao);
-
-        this.gl.uniformMatrix4fv(this.locations.projection, false, projMatrix);
-        this.gl.uniformMatrix4fv(this.locations.view, false, viewMatrix);
-        this.gl.uniformMatrix4fv(this.locations.model, false, modelMatrix);
-
-        this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_alpha"), 1.0);
-
-        this.gl.drawElements(this.gl.TRIANGLES, indexCount, this.gl.UNSIGNED_INT, 0);
-        // DEBUG MODE:
-        // this.gl.drawElements(this.gl.LINE_STRIP, indexCount, this.gl.UNSIGNED_INT, 0);
     }
 
     setupHighlight() {
@@ -193,35 +145,6 @@ export class Renderer {
         this.gl.uniform1f(alphaLoc, 1.0);
     }
 
-    createTextureArray(pixelData, width, height, depth) {
-        const texture = this.gl.createTexture();
-
-        this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texture);
-
-        this.gl.texImage3D(
-            this.gl.TEXTURE_2D_ARRAY,
-            0,
-            this.gl.RGBA,
-            width, height, depth,
-            0,
-            this.gl.RGBA,
-            this.gl.UNSIGNED_BYTE,
-            pixelData
-        );
-
-        // Tell GPU to repeat the texture when UVs go outside 0-1 range (for atlas)
-        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
-        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
-
-        // Use nearest filtering for pixelated look
-        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-        this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-
-        // Tell shader to use texture unit 0
-        this.gl.uniform1i(this.locations.texture, 0);
-    }
-
     createTextureArrayFromImage(images, textureSize) {
         const texture = this.gl.createTexture();
         this.gl.activeTexture(this.gl.TEXTURE0);
@@ -258,5 +181,58 @@ export class Renderer {
 
         // Tell shader to use texture unit 0
         this.gl.uniform1i(this.locations.texture, 0);
+    }
+
+    createMesh(vertexData, indexData) {
+        const vao = this.gl.createVertexArray();
+        this.gl.bindVertexArray(vao);
+
+        const vbo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
+
+        const stride = 6 * 4; // 3 positions + 3 uvs = 6 floats * 4 bytes per float
+
+        this.gl.enableVertexAttribArray(this.locations.position);
+        this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
+        this.gl.enableVertexAttribArray(this.locations.uv);
+        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
+
+        const ebo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ebo);
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
+
+        return { vao, vbo, ebo, indexCount: indexData.length };
+    }
+
+    updateMesh(mesh, vertexData, indexData) {
+        this.gl.bindVertexArray(mesh.vao);
+
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, mesh.vbo);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
+
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, mesh.ebo);
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
+
+        mesh.indexCount = indexData.length;
+    }
+
+    beginFrame(projMatrix, viewMatrix, skyColor) {
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+
+        this.gl.clearColor(skyColor[0], skyColor[1], skyColor[2], 1.0);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+
+        this.gl.uniformMatrix4fv(this.locations.projection, false, projMatrix);
+        this.gl.uniformMatrix4fv(this.locations.view, false, viewMatrix);
+
+        this.gl.uniform1f(this.gl.getUniformLocation(this.program, 'u_alpha'), 1.0);
+    }
+
+    drawMesh(mesh, modelMatrix, sunDirection) {
+        this.gl.bindVertexArray(mesh.vao);
+        this.gl.uniformMatrix4fv(this.locations.model, false, modelMatrix);
+        this.gl.uniform3fv(this.locations.sun, sunDirection);
+        this.gl.drawElements(this.gl.TRIANGLES, mesh.indexCount, this.gl.UNSIGNED_INT, 0);
     }
 }

@@ -1,4 +1,5 @@
 import { Mat4 } from "./Math.js"
+import { ChunkManager } from "./ChunkManager.js"
 
 export class FirstPersonCamera {
     constructor(canvas) {
@@ -159,7 +160,7 @@ export class FirstPersonCamera {
     }
 
     // The AABB Collision Checker
-    checkCollision(chunk) {
+    checkCollision(chunkManager) {
         const minX = Math.floor(this.position[0] - this.playerWidth / 2);
         const maxX = Math.floor(this.position[0] + this.playerWidth / 2);
         const minY = Math.floor(this.position[1]); // Feet
@@ -171,7 +172,7 @@ export class FirstPersonCamera {
             for (let y = minY; y <= maxY; y++) {
                 for (let z = minZ; z <= maxZ; z++) {
 
-                    if (chunk.getBlock(x, y, z) !== 0) {
+                    if (chunkManager.getBlock(x, y, z) !== 0) {
                         return true;
                     }
 

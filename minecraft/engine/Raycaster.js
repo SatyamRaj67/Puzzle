@@ -1,5 +1,7 @@
+import { ChunkManager } from "./ChunkManager.js";
+
 export class Raycaster {
-    static step(origin, direction, chunk, maxDistance = 8) {
+    static step(origin, direction, chunkManager, maxDistance = 8) {
         // 1. Where to start in the voxel grid (floor of the origin)
         let x = Math.floor(origin[0]);
         let y = Math.floor(origin[1]);
@@ -26,13 +28,10 @@ export class Raycaster {
 
         // 5. The Core DDA Loop
         while (distance < maxDistance) {
-            // Step A: Check if the current block is inside out chunk boundaries
-            if (x >= 0 && x < chunk.width && y >= 0 && y < chunk.height && z >= 0 && z < chunk.width) {
-                const blockId = chunk.getBlock(x, y, z);
+            const blockId = chunkManager.getBlock(x, y, z);
 
-                if (blockId !== 0) {
-                    return { x, y, z, blockId, normal: hitNormal };
-                }
+            if (blockId !== 0) {
+                return { x, y, z, blockId, normal: hitNormal };
             }
 
             // Step B: Move to the next voxel boundary
