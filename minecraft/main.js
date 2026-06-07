@@ -52,12 +52,23 @@ async function initGame() {
         Mat4.perspective(projection, Math.PI / 4, canvas.width / canvas.height, 0.1, 1000.0);
     });
 
+    const debugHUD = document.getElementById('debug-hud');
+    let showDebugInfo = false;
+
     let blockType = 2; // Default block type to place (e.g., dirt)
+
+
     window.addEventListener('keydown', (e) => {
         switch (e.key) {
             case '1': blockType = 1; break; // Grass
             case '2': blockType = 2; break; // Dirt
             case '3': blockType = 3; break; // Stone
+
+            case 'F3':
+                e.preventDefault();
+                showDebugInfo = !showDebugInfo;
+                debugHUD.style.display = showDebugInfo ? 'block' : 'none';
+                break;
         }
     })
 
@@ -107,11 +118,16 @@ async function initGame() {
         const pos = camera.getCameraPosition();
         chunkManager.update(pos[0], pos[2]);
 
+        if (showDebugInfo) {
+            debugHUD.innerText =
+                `XYZ: ${pos[0].toFixed(0)} / ${pos[1].toFixed(0)} / ${pos[2].toFixed(0)}\n` +
+                `Chunks Loaded: ${chunkManager.chunks.size}`;
+        }
+
         camera.update(chunkManager);
         const view = camera.getViewMatrix();
 
-        // Calculate a rotating sun (1 full rotation every ~50 seconds)
-        const time = Math.PI / 4;
+        const time = performance.now() * 0.0001;
 
         const sunDirection = [
             Math.sin(time),
@@ -119,17 +135,8 @@ async function initGame() {
             0.5
         ]
 
-        // Dynamic Sky Color (Interpolate between day and night colors based on sun height)
-        let skyR = 0.5, skyG = 0.7, skyB = 1.0; // Default Day Blue
-
-        if (sunDirection[1] < 0.2) {
-            const fade = Math.max(0, sunDirection[1] / 0.2);
-            skyR *= fade;
-            skyG *= fade;
-            skyB *= fade;
-        }
-
-        renderer.beginFrame(projection, view, [skyR, skyG, skyB]);
+        renderer.beginFrame(projection, view, [0, 0, 0]);
+        renderer.drawSkybox(projection, view, sunDirection)
 
         chunkManager.draw(sunDirection)
 

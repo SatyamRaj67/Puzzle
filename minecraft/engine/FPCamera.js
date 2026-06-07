@@ -3,7 +3,7 @@ import { ChunkManager } from "./ChunkManager.js"
 
 export class FirstPersonCamera {
     constructor(canvas) {
-        this.position = [16, 20, 16];
+        this.position = [16, 100, 16];
         this.velocity = [0, 0, 0];
 
         this.playerWidth = 0.6;
@@ -16,7 +16,7 @@ export class FirstPersonCamera {
         this.viewMatrix = Mat4.create();
 
         this.speed = 0.15; // Movement speed
-        this.gravity = -0.015; // Gravity acceleration
+        this.gravity = -0.012; // Gravity acceleration
         this.jumpStrength = 0.2;
 
         this.onGround = false;

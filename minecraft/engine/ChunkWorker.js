@@ -1,7 +1,7 @@
 import { VoxelChunk } from "./VoxelChunk.js";
 import { PerlinNoise } from "./Noise.js";
 
-const noise = new PerlinNoise(12345);
+const noise = new PerlinNoise();
 
 self.onmessage = function (event) {
     // Recieve instructions from main thread

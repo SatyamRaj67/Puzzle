@@ -1,4 +1,4 @@
-import { vertexShaderSource, fragmentShaderSource } from './Shaders.js';
+import { vertexShaderSource, fragmentShaderSource, skyVertexShaderSource, skyFragmentShaderSource } from './Shaders.js';
 
 export class Renderer {
     constructor(canvas) {
@@ -21,9 +21,20 @@ export class Renderer {
             sun: this.gl.getUniformLocation(this.program, 'u_sunDirection')
         };
 
+        // Compile Sky Program
+        this.skyProgram = this.createProgram(skyVertexShaderSource, skyFragmentShaderSource);
+        this.skyLocations = {
+            position: this.gl.getAttribLocation(this.skyProgram, 'a_position'),
+            projection: this.gl.getUniformLocation(this.skyProgram, 'u_projection'),
+            view: this.gl.getUniformLocation(this.skyProgram, 'u_view'),
+            sun: this.gl.getUniformLocation(this.skyProgram, 'u_sunDirection')
+        }
+
         this.gl.enable(this.gl.DEPTH_TEST);
         this.gl.enable(this.gl.CULL_FACE);
+
         this.setupHighlight();
+        this.setupSkybox();
     }
 
     createProgram(vertexSource, fragmentSource) {
@@ -50,6 +61,46 @@ export class Renderer {
         this.gl.linkProgram(program);
 
         return program;
+    }
+
+    createMesh(vertexData, indexData) {
+        const vao = this.gl.createVertexArray();
+        this.gl.bindVertexArray(vao);
+
+        const vbo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
+
+        const stride = 6 * 4;
+        this.gl.enableVertexAttribArray(this.locations.position);
+        this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
+        this.gl.enableVertexAttribArray(this.locations.uv);
+        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
+
+        const ebo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ebo);
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
+
+        return { vao, vbo, ebo, indexCount: indexData.length };
+    }
+
+    updateMesh(mesh, vertexData, indexData) {
+        this.gl.bindVertexArray(mesh.vao);
+
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, mesh.vbo);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
+
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, mesh.ebo);
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
+
+        mesh.indexCount = indexData.length;
+    }
+
+    drawMesh(mesh, modelMatrix, sunDir) {
+        this.gl.bindVertexArray(mesh.vao);
+        this.gl.uniformMatrix4fv(this.locations.model, false, modelMatrix);
+        this.gl.uniform3fv(this.locations.sun, sunDir);
+        this.gl.drawElements(this.gl.TRIANGLES, mesh.indexCount, this.gl.UNSIGNED_INT, 0);
     }
 
     setupHighlight() {
@@ -183,40 +234,6 @@ export class Renderer {
         this.gl.uniform1i(this.locations.texture, 0);
     }
 
-    createMesh(vertexData, indexData) {
-        const vao = this.gl.createVertexArray();
-        this.gl.bindVertexArray(vao);
-
-        const vbo = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
-
-        const stride = 6 * 4; // 3 positions + 3 uvs = 6 floats * 4 bytes per float
-
-        this.gl.enableVertexAttribArray(this.locations.position);
-        this.gl.vertexAttribPointer(this.locations.position, 3, this.gl.FLOAT, false, stride, 0);
-        this.gl.enableVertexAttribArray(this.locations.uv);
-        this.gl.vertexAttribPointer(this.locations.uv, 3, this.gl.FLOAT, false, stride, 3 * 4);
-
-        const ebo = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ebo);
-        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
-
-        return { vao, vbo, ebo, indexCount: indexData.length };
-    }
-
-    updateMesh(mesh, vertexData, indexData) {
-        this.gl.bindVertexArray(mesh.vao);
-
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, mesh.vbo);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.DYNAMIC_DRAW);
-
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, mesh.ebo);
-        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.DYNAMIC_DRAW);
-
-        mesh.indexCount = indexData.length;
-    }
-
     beginFrame(projMatrix, viewMatrix, skyColor) {
         this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
@@ -229,10 +246,60 @@ export class Renderer {
         this.gl.uniform1f(this.gl.getUniformLocation(this.program, 'u_alpha'), 1.0);
     }
 
-    drawMesh(mesh, modelMatrix, sunDirection) {
-        this.gl.bindVertexArray(mesh.vao);
-        this.gl.uniformMatrix4fv(this.locations.model, false, modelMatrix);
-        this.gl.uniform3fv(this.locations.sun, sunDirection);
-        this.gl.drawElements(this.gl.TRIANGLES, mesh.indexCount, this.gl.UNSIGNED_INT, 0);
+    setupSkybox() {
+        this.skyVao = this.gl.createVertexArray();
+        this.gl.bindVertexArray(this.skyVao);
+
+        // The 8 corners of our mathematical sky cube
+        const vData = new Float32Array([
+            -1, 1, -1,
+            -1, -1, -1,
+            1, -1, -1,
+            1, 1, -1,
+            -1, 1, 1,
+            -1, -1, 1,
+            1, -1, 1,
+            1, 1, 1
+        ])
+
+        // The 36 indices to draw the 12 triangles of the cube
+        const iData = new Uint16Array([
+            0, 1, 2, 2, 3, 0, // Back face
+            4, 5, 6, 6, 7, 4, // Front face
+            4, 5, 1, 1, 0, 4, // Left face
+            3, 2, 6, 6, 7, 3, // Right face
+            4, 0, 3, 3, 7, 4, // Top face
+            1, 5, 6, 6, 2, 1  // Bottom face
+        ])
+
+        const vbo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vData, this.gl.STATIC_DRAW);
+
+        this.gl.enableVertexAttribArray(this.skyLocations.position);
+        this.gl.vertexAttribPointer(this.skyLocations.position, 3, this.gl.FLOAT, false, 0, 0);
+
+        const ebo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ebo);
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, iData, this.gl.STATIC_DRAW);
+    }
+
+    drawSkybox(projMatrix, viewMatrix, sunDirection) {
+        this.gl.useProgram(this.skyProgram);
+
+        this.gl.depthFunc(this.gl.LEQUAL); // Ensure skybox is drawn behind everything
+        this.gl.disable(this.gl.CULL_FACE); // Disable culling for skybox
+
+        this.gl.bindVertexArray(this.skyVao);
+
+        this.gl.uniformMatrix4fv(this.skyLocations.projection, false, projMatrix);
+        this.gl.uniformMatrix4fv(this.skyLocations.view, false, viewMatrix);
+        this.gl.uniform3fv(this.skyLocations.sun, sunDirection);
+
+        this.gl.drawElements(this.gl.TRIANGLES, 36, this.gl.UNSIGNED_SHORT, 0);
+
+        this.gl.enable(this.gl.CULL_FACE); // Re-enable culling for other objects
+        this.gl.depthFunc(this.gl.LESS); // Restore default depth function
+        this.gl.useProgram(this.program); // Switch back to main shader
     }
 }
