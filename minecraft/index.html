@@ -19,12 +19,26 @@
 
     <div id="pause-menu">
       <div class="menu-container">
-        <h1>Game Paused</h1>
+        <h1>Game Menu</h1>
+        <div class="setting-group">
+          <button id="btn-resume">Back to Game</button>
+        </div>
 
         <div class="setting-group">
-          <label
-            ><span>Field of View</span> <span id="fov-val">90°</span></label
-          >
+          <button id="btn-options">Options...</button>
+          <button id="btn-devtools">Devtools</button>
+        </div>
+
+        <div class="setting-group">
+          <button id="btn-quit">Save & Quit Game</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="options-menu">
+      <div class="menu-container">
+        <div class="setting-group">
+          <label>Field of View: <span id="fov-val">90°</span></label>
           <input
             type="range"
             id="fov-slider"
@@ -35,10 +49,7 @@
         </div>
 
         <div class="setting-group">
-          <label
-            ><span>Render Distance</span>
-            <span id="rd-val">2 Chunks</span></label
-          >
+          <label>Render: <span id="rd-val">2</span> Chunks</label>
           <input
             type="range"
             id="rd-slider"
@@ -48,6 +59,14 @@
           />
         </div>
 
+        <div class="setting-group">
+          <button id="go-pause-menu-from-options">Go Back</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="devtools-menu">
+      <div class="menu-container">
         <div class="setting-group">
           <label
             ><span>Time Speed</span> <span id="speed-val">1.0x</span></label
@@ -61,23 +80,14 @@
           />
         </div>
 
-        <div class="btn-row">
+        <div class="setting-group">
           <button id="btn-toggle-time">Pause Time</button>
           <button id="btn-set-noon">Set Noon</button>
         </div>
 
-        <button
-          class="primary-btn"
-          id="btn-resume"
-        >
-          Resume Game
-        </button>
-        <button
-          class="danger-btn"
-          id="btn-quit"
-        >
-          Save & Quit
-        </button>
+        <div class="setting-group">
+          <button id="go-pause-menu-from-devtools">Go Back</button>
+        </div>
       </div>
     </div>
 
@@ -130,6 +140,10 @@
       ></div>
     </div>
   </body>
+  <script
+    type="module"
+    src="ui.js"
+  ></script>
   <script
     type="module"
     src="main.js"

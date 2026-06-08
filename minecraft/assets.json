@@ -1,42 +1,31 @@
 {
-    "textures": [
-        "textures/highlight.png",
-        "textures/grass_block_top.png",
-        "textures/grass_block_side.png",
-        "textures/dirt.png",
-        "textures/stone.png",
-        "textures/oak_log_top.png",
-        "textures/oak_log.png",
-        "textures/oak_leaves.png",
-        "textures/glowstone.png"
-    ],
     "blocks": {
         "grass": {
-            "Top": 1,
-            "Bottom": 3,
-            "Side": 2
+            "Top": "textures/model/grass_block_top.png",
+            "Bottom": "textures/model/dirt.png",
+            "Side": "textures/model/grass_block_side.png"
         },
         "dirt": {
-            "All": 3
+            "All": "textures/model/dirt.png"
         },
         "stone": {
-            "All": 4
+            "All": "textures/model/stone.png"
         },
         "oak_log": {
-            "Top": 5,
-            "Bottom": 5,
-            "Side": 6
+            "Top": "textures/model/oak_log_top.png",
+            "Bottom": "textures/model/oak_log_top.png",
+            "Side": "textures/model/oak_log.png"
         },
         "oak_leaves": {
-            "All": 7,
+            "All": "textures/model/oak_leaves.png",
             "transparent": true
         },
         "glowstone": {
-            "All": 8,
-            "light" : 15
+            "All": "textures/model/glowstone.png",
+            "light": 15
         }
     },
     "system": {
-        "highlightLayer": 0
+        "highlightLayer": "textures/model/highlight.png"
     }
 }

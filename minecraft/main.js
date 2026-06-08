@@ -1,4 +1,5 @@
 import { ChunkManager } from "./engine/ChunkManager.js";
+import { compileRegistry } from './engine/AssetsCompiler.js'
 import { Entity } from "./engine/Entity.js";
 import { FirstPersonCamera } from "./engine/FPCamera.js";
 import { Mat4 } from "./engine/Math.js";
@@ -7,11 +8,13 @@ import { Raycaster } from "./engine/Raycaster.js";
 import { Renderer } from "./engine/Renderer.js";
 import { VoxelChunk } from "./engine/VoxelChunk.js";
 
-
+// === CANVAS ===
 const canvas = document.getElementById('gameCanvas');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// === HELPER FUNCTIONS ===
+// --- Asset Loading
 async function loadImages(urls) {
     const promises = urls.map(url => {
         return new Promise((resolve, reject) => {
@@ -25,62 +28,74 @@ async function loadImages(urls) {
 }
 
 async function initGame() {
+    // === CAMERA ===
     const renderer = new Renderer(canvas);
     const camera = new FirstPersonCamera(canvas);
 
-    console.log('Fetching texture atlas...');
+    const projection = Mat4.create();
+    const model = Mat4.create();
+
+    Mat4.perspective(projection, Math.PI / 4, canvas.width / canvas.height, 0.1, 1000.0);
+
+    // === RESIZE ===
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        Mat4.perspective(projection, Math.PI / 4, canvas.width / canvas.height, 0.1, 1000.0);
+    });
+
+    // === ASSETS ===
+    console.log('Fetching and compiling assets...');
     const assetResponse = await fetch('assets.json');
-    const assets = await assetResponse.json();
+    const rawAssets = await assetResponse.json();
 
-    console.log('Loading textures...');
-    const images = await loadImages(assets.textures);
-    console.log('Textures loaded successfully');
+    const compiledAssets = await compileRegistry(rawAssets);
 
-    renderer.createTextureArrayFromImage(images, 16);
+    const images = await loadImages(compiledAssets.textureList)
+    console.log('Textures loaded');
 
-    const BLOCKS = { AIR: 0 }
+    renderer.createTextureArrayFromImage(images, 16)
+
+    // === BLOCK REGISTRY SETUP ===
+    const BLOCKS = { AIR: 0 };
     const BLOCK_DATA = { 0: null };
 
-    let currentId = 1;
-    for (const [name, textures] of Object.entries(assets.blocks)) {
-        BLOCKS[name.toUpperCase()] = currentId;
-        BLOCK_DATA[currentId] = textures;
-        currentId++;
+    for (const [blockName, id] of Object.entries(compiledAssets.blockIds)) {
+        BLOCKS[blockName.toUpperCase()] = id;
     }
 
-    const chunkManager = new ChunkManager(renderer, BLOCK_DATA);
+    for (const [blockName, config] of Object.entries(compiledAssets.blockRegistry)) {
+        BLOCK_DATA[config.id] = config;
+    }
 
+    // Precompute highlight layer index for quick access in rendering
+    const highlightLayerIndex = compiledAssets.textureList.indexOf(rawAssets.system.highlightLayer);
+
+    // === CHUNK MANAGER SETUP ===
+    const chunkManager = new ChunkManager(renderer, BLOCK_DATA);
     chunkManager.worker.postMessage({
         type: 'init',
         blocks: BLOCKS,
         blockRegistry: BLOCK_DATA
-    })
+    });
 
+    // === ENTITIES ===
     const cowModelData = Entity.getModelData();
     const cowMesh = renderer.createEntityMesh(cowModelData.vertices, cowModelData.indices);
 
     const cows = [];
 
     const playerPos = camera.getCameraPosition();
-    
+
     cows.push(new Entity(playerPos[0] + 5, playerPos[1], playerPos[2] + 5));
 
-    // 4. Setup Matrices
-    const projection = Mat4.create();
-    const model = Mat4.create();
-
-    Mat4.perspective(projection, Math.PI / 4, canvas.width / canvas.height, 0.1, 1000.0);
-
-    // ======================
-    // UI and MENU
-    // ======================
-
+    // === UI & MENU === 
+    // --- Pause Menu
     const pauseMenu = document.getElementById('pause-menu');
-
     document.addEventListener('pointerlockchange', () => {
         if (document.pointerLockElement === canvas) {
             pauseMenu.style.display = 'none';
-            lastFrameTime = performance.now(); // Reset frame time to prevent large delta
+            lastFrameTime = performance.now();
         } else {
             pauseMenu.style.display = 'flex';
         }
@@ -90,13 +105,19 @@ async function initGame() {
         canvas.requestPointerLock();
     })
 
+    // --- Options Menu
+    pauseMenu.querySelector('#btn-options').addEventListener('click', () => {
+        document.getElementById('options-menu').style.display = 'flex';
+        pauseMenu.style.display = 'none';
+    })
+
     const rdSlider = document.getElementById('rd-slider');
     const rdVal = document.getElementById('rd-val');
 
     rdSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
         chunkManager.renderDistance = value;
-        rdVal.innerText = `${value} Chunks`;
+        rdVal.innerText = value;
     })
 
     const fovSlider = document.getElementById('fov-slider');
@@ -106,6 +127,21 @@ async function initGame() {
         currentFOV = value * Math.PI / 180;
         Mat4.perspective(projection, currentFOV, canvas.width / canvas.height, 0.1, 1000.0);
         fovVal.innerText = `${value}°`;
+    })
+
+    document.getElementById('go-pause-menu-from-options').addEventListener('click', () => {
+        document.getElementById('options-menu').style.display = 'none';
+        pauseMenu.style.display = 'flex';
+    })
+
+    document.getElementById('btn-devtools').addEventListener('click', () => {
+        document.getElementById('devtools-menu').style.display = 'flex';
+        pauseMenu.style.display = 'none';
+    })
+
+    document.getElementById('go-pause-menu-from-devtools').addEventListener('click', () => {
+        document.getElementById('devtools-menu').style.display = 'none';
+        pauseMenu.style.display = 'flex';
     })
 
     const speedSlider = document.getElementById('speed-slider');
@@ -131,12 +167,7 @@ async function initGame() {
         window.close();
     })
 
-    window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        Mat4.perspective(projection, Math.PI / 4, canvas.width / canvas.height, 0.1, 1000.0);
-    });
-
+    // === DEBUG HUD ===
     const debugHUD = document.getElementById('debug-hud');
     let showDebugInfo = false;
 
@@ -148,6 +179,7 @@ async function initGame() {
         }
     })
 
+    // === HOTBAR & INVENTORY ===
     const inventory = [
         BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE,
         BLOCKS.OAK_LOG, BLOCKS.OAK_LEAVES, BLOCKS.GLOWSTONE,
@@ -185,7 +217,7 @@ async function initGame() {
 
     })
 
-
+    // === MOUSE INTERACTION & RAYCASTING ===
     canvas.addEventListener('mousedown', (event) => {
         if (document.pointerLockElement !== canvas) return;
 
@@ -225,8 +257,6 @@ async function initGame() {
             }
         }
     })
-
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     let activehit = null;
 
@@ -282,7 +312,7 @@ async function initGame() {
         activehit = Raycaster.step(cameraOrigin, rayDirection, chunkManager, 8);
 
         if (activehit) {
-            renderer.drawHighlight(projection, view, activehit.x, activehit.y, activehit.z, activehit.normal, assets.system.highlightLayer);
+            renderer.drawHighlight(projection, view, activehit.x, activehit.y, activehit.z, activehit.normal, highlightLayerIndex);
         }
 
         renderer.gl.useProgram(renderer.entityProgram);
@@ -291,7 +321,7 @@ async function initGame() {
 
         for (const cow of cows) {
             cow.update(deltaTime, chunkManager);
-            renderer.drawEntity(cowMesh, cow.getModelMatrix(), sunDirection, 2); 
+            renderer.drawEntity(cowMesh, cow.getModelMatrix(), sunDirection, 2);
         }
 
         renderer.gl.useProgram(renderer.program);
