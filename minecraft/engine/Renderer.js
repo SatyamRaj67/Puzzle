@@ -1,4 +1,4 @@
-import { vertexShaderSource, fragmentShaderSource, skyVertexShaderSource, skyFragmentShaderSource, highlightVertexShaderSource, highlightFragmentShaderSource } from './Shaders.js';
+import { vertexShaderSource, fragmentShaderSource, skyVertexShaderSource, skyFragmentShaderSource, highlightVertexShaderSource, highlightFragmentShaderSource, entityVertexShaderSource, entityFragmentShaderSource } from './Shaders.js';
 
 export class Renderer {
     constructor(canvas) {
@@ -43,6 +43,19 @@ export class Renderer {
             view: this.gl.getUniformLocation(this.skyProgram, 'u_view'),
             sun: this.gl.getUniformLocation(this.skyProgram, 'u_sunDirection')
         }
+
+        this.entityProgram = this.createProgram(entityVertexShaderSource, entityFragmentShaderSource);
+        this.entityLocations = {
+            position: this.gl.getAttribLocation(this.entityProgram, 'a_position'),
+            uv: this.gl.getAttribLocation(this.entityProgram, 'a_uv'),
+            normal: this.gl.getAttribLocation(this.entityProgram, 'a_normal'),
+            projection: this.gl.getUniformLocation(this.entityProgram, 'u_projection'),
+            view: this.gl.getUniformLocation(this.entityProgram, 'u_view'),
+            model: this.gl.getUniformLocation(this.entityProgram, 'u_model'),
+            texture: this.gl.getUniformLocation(this.entityProgram, 'u_texture'),
+            sun: this.gl.getUniformLocation(this.entityProgram, 'u_sunDirection'),
+            layer: this.gl.getUniformLocation(this.entityProgram, 'u_layer')
+        };
 
         this.gl.enable(this.gl.DEPTH_TEST);
         this.gl.enable(this.gl.CULL_FACE);
@@ -328,5 +341,47 @@ export class Renderer {
         this.gl.enable(this.gl.CULL_FACE); // Re-enable culling for other objects
         this.gl.depthFunc(this.gl.LESS); // Restore default depth function
         this.gl.useProgram(this.program); // Switch back to main shader
+    }
+
+    createEntityMesh(vertexData, indexData) {
+        const vao = this.gl.createVertexArray();
+        this.gl.bindVertexArray(vao);
+
+        const vbo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.STATIC_DRAW);
+
+        const stride = 8 * 4; // 3 pos + 3 uv + 2 normal = 8 floats * 4 bytes each
+
+        this.gl.enableVertexAttribArray(this.entityLocations.position);
+        this.gl.vertexAttribPointer(this.entityLocations.position, 3, this.gl.FLOAT, false, stride, 0);
+
+        this.gl.enableVertexAttribArray(this.entityLocations.uv);
+        this.gl.vertexAttribPointer(this.entityLocations.uv, 2, this.gl.FLOAT, false, stride, 3 * 4);
+
+        this.gl.enableVertexAttribArray(this.entityLocations.normal);
+        this.gl.vertexAttribPointer(this.entityLocations.normal, 3, this.gl.FLOAT, false, stride, 5 * 4);
+
+        const ebo = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ebo);
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indexData, this.gl.STATIC_DRAW);
+
+        return { vao, vbo, ebo, indexCount: indexData.length };
+    }
+
+    drawEntity(mesh, modelMatrix, sunDir, textureLayer) {
+        this.gl.useProgram(this.entityProgram);
+        this.gl.disable(this.gl.CULL_FACE);
+
+        this.gl.bindVertexArray(mesh.vao);
+
+        this.gl.uniformMatrix4fv(this.entityLocations.model, false, modelMatrix);
+        this.gl.uniform3fv(this.entityLocations.sun, sunDir);
+        this.gl.uniform1f(this.entityLocations.layer, textureLayer);
+
+        this.gl.drawElements(this.gl.TRIANGLES, mesh.indexCount, this.gl.UNSIGNED_SHORT, 0);
+
+        this.gl.enable(this.gl.CULL_FACE);
+        this.gl.useProgram(this.program);
     }
 }

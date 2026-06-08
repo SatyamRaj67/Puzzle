@@ -217,9 +217,9 @@ export class VoxelChunk {
                     // --- PHASE 2: GREEDY SCAN THE MASK ---
                     // Group identical blocks into huge quads
 
-                    for (let h = 0; h < this.height; h++) {
-                        for (let w = 0; w < this.width; w++) {
-                            const maskVal = mask[w + (h * this.width)];
+                    for (let h = 0; h < hLimit; h++) {
+                        for (let w = 0; w < wLimit; w++) {
+                            const maskVal = mask[w + (h * wLimit)];
 
                             if (maskVal === 0) continue; // Skip empty cells
 

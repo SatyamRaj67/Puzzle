@@ -1,4 +1,5 @@
 import { ChunkManager } from "./engine/ChunkManager.js";
+import { Entity } from "./engine/Entity.js";
 import { FirstPersonCamera } from "./engine/FPCamera.js";
 import { Mat4 } from "./engine/Math.js";
 import { PerlinNoise } from "./engine/Noise.js";
@@ -51,9 +52,18 @@ async function initGame() {
 
     chunkManager.worker.postMessage({
         type: 'init',
-        blocks: BLOCKS
+        blocks: BLOCKS,
+        blockRegistry: BLOCK_DATA
     })
 
+    const cowModelData = Entity.getModelData();
+    const cowMesh = renderer.createEntityMesh(cowModelData.vertices, cowModelData.indices);
+
+    const cows = [];
+
+    const playerPos = camera.getCameraPosition();
+    
+    cows.push(new Entity(playerPos[0] + 5, playerPos[1], playerPos[2] + 5));
 
     // 4. Setup Matrices
     const projection = Mat4.create();
@@ -274,7 +284,19 @@ async function initGame() {
         if (activehit) {
             renderer.drawHighlight(projection, view, activehit.x, activehit.y, activehit.z, activehit.normal, assets.system.highlightLayer);
         }
+
+        renderer.gl.useProgram(renderer.entityProgram);
+        renderer.gl.uniformMatrix4fv(renderer.entityLocations.projection, false, projection);
+        renderer.gl.uniformMatrix4fv(renderer.entityLocations.view, false, view);
+
+        for (const cow of cows) {
+            cow.update(deltaTime, chunkManager);
+            renderer.drawEntity(cowMesh, cow.getModelMatrix(), sunDirection, 2); 
+        }
+
+        renderer.gl.useProgram(renderer.program);
     }
+
     animate();
 }
 

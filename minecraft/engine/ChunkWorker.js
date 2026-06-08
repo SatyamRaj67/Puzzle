@@ -6,10 +6,12 @@ const terrainNoise = new PerlinNoise();
 const treeNoise = new PerlinNoise();
 
 let BLOCKS = null;
+let BLOCK_REGISTRY = null;
 
 self.onmessage = function (event) {
     if (event.data.type === 'init') {
         BLOCKS = event.data.blocks;
+        BLOCK_REGISTRY = event.data.blockRegistry;
         return;
     }
 
@@ -56,7 +58,7 @@ self.onmessage = function (event) {
             for (let y = chunkHeight - 1; y >= 0; y--) {
                 const blockId = chunk.getBlock(x, y, z);
 
-                const blockData = BLOCKS[blockId]
+                const blockData = BLOCK_REGISTRY[blockId];
                 const isTransparent = blockId === 0 || (blockData && blockData.transparent);
 
                 if (!isTransparent) {

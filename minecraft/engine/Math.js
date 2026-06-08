@@ -127,7 +127,7 @@ export const Mat4 = {
     },
 
     // 6. Vector * Matrix Multiplication
-    transformVec4: function(out, v, m) {
+    transformVec4: function (out, v, m) {
         let x = v[0], y = v[1], z = v[2], w = v[3];
 
         out[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w;
@@ -136,7 +136,38 @@ export const Mat4 = {
         out[3] = m[3] * x + m[7] * y + m[11] * z + m[15] * w;
 
         return out;
-    }
+    },
+
+    // 7. Rotate around the Y axis
+    rotateY: function (out, a, rad) {
+        let s = Math.sin(rad);
+        let c = Math.cos(rad);
+        let a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
+        let a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
+
+        if (a !== out) {
+            out[4] = a[4];
+            out[5] = a[5];
+            out[6] = a[6];
+            out[7] = a[7];
+            out[12] = a[12];
+            out[13] = a[13];
+            out[14] = a[14];
+            out[15] = a[15];
+        }
+
+        out[0] = a00 * c - a20 * s;
+        out[1] = a01 * c - a21 * s;
+        out[2] = a02 * c - a22 * s;
+        out[3] = a03 * c - a23 * s;
+
+        out[8] = a00 * s + a20 * c;
+        out[9] = a01 * s + a21 * c;
+        out[10] = a02 * s + a22 * c;
+        out[11] = a03 * s + a23 * c;
+
+        return out;
+    },
 }
 
 export function clamp(value, min, max) {

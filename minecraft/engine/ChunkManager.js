@@ -267,6 +267,8 @@ export class ChunkManager {
             }
         }
 
+        this.updateSkyLightColumn(worldX, worldZ);
+
         this.rebuildChunkMesh(cx, cz);
         if (localX === 0) this.rebuildChunkMesh(cx - 1, cz);
         if (localX === this.chunkWidth - 1) this.rebuildChunkMesh(cx + 1, cz);
@@ -411,5 +413,31 @@ export class ChunkManager {
         const localZ = worldZ - (cz * this.chunkWidth);
         
         return this.chunks.get(key).getSkyLight(localX, worldY, localZ);
+    }
+
+    updateSkyLightColumn(worldX, worldZ) {
+        let currentSkyLight = 15;
+
+        for (let y = 127; y >= 0; y--) {
+            const blockId = this.getBlock(worldX, y, worldZ);
+            const blockData = this.blockRegistry[blockId];
+
+            const isTransparent = blockId === 0 || (blockData && blockData.transparent);
+
+            if (!isTransparent) {
+                currentSkyLight = 0;
+            }
+
+            const cx = Math.floor(worldX / this.chunkWidth);
+            const cz = Math.floor(worldZ / this.chunkWidth);
+            const key = this.getChunkKey(cx, cz);
+
+            if (this.chunks.has(key)) {
+                const localX = worldX - (cx * this.chunkWidth);
+                const localZ = worldZ - (cz * this.chunkWidth);
+
+                this.chunks.get(key).setSkyLight(localX, y, localZ, currentSkyLight);
+            }
+        }
     }
 }

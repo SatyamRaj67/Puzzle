@@ -207,3 +207,57 @@ void main() {
     outColor = vec4(skyColor, 1.0);
 }
 `
+
+export const entityVertexShaderSource = `#version 300 es
+in vec3 a_position;
+in vec2 a_uv;
+in vec3 a_normal;
+
+uniform mat4 u_projection;
+uniform mat4 u_view;
+uniform mat4 u_model;
+
+out vec2 v_uv;
+out vec3 v_normal;
+out vec3 v_worldPos;
+
+void main() {
+    vec4 worldPosition = u_model * vec4(a_position, 1.0);
+    gl_Position = u_projection * u_view * worldPosition;
+
+    v_normal = mat3(u_model) * a_normal;
+    v_worldPos = worldPosition.xyz;
+    v_uv = a_uv;
+}
+`
+
+export const entityFragmentShaderSource = `#version 300 es
+precision highp float;
+precision highp sampler2DArray;
+
+in vec2 v_uv;
+in vec3 v_normal;
+in vec3 v_worldPos;
+
+uniform sampler2DArray u_texture;
+uniform vec3 u_sunDirection;
+uniform float u_layer;
+
+out vec4 outColor;
+
+void main() {
+    vec4 texColor = texture(u_texture, vec3(v_uv, u_layer));
+    if (texColor.a < 0.1) discard;
+
+    vec3 normal = normalize(v_normal);
+    vec3 sunDir = normalize(u_sunDirection);
+    float sunHeight = max(sunDir.y, 0.0);
+
+    float diffuse = max(dot(normal, sunDir), 0.0) * sunHeight;
+    float ambient = 0.2 + (0.3 * sunHeight);
+
+    float lightIntensity = diffuse + ambient;
+
+    outColor = vec4(texColor.rgb * lightIntensity, texColor.a);
+}
+`
