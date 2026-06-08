@@ -50,6 +50,24 @@ export class VoxelChunk {
         return (this.data[index] >> 8) & 0x000F;
     }
 
+    setSkyLight(x, y, z, lightValue) {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height || z < 0 || z >= this.width) {
+            throw new Error("Block coordinates out of bounds");
+        }
+
+        const index = this.getIndex(x, y, z);
+        this.data[index] = (this.data[index] & 0x0FFF) | (lightValue << 12);
+    }
+
+    getSkyLight(x, y, z) {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height || z < 0 || z >= this.width) {
+            return 0; // Return 0 for out-of-bounds blocks (no skylight)
+        }
+
+        const index = this.getIndex(x, y, z);
+        return (this.data[index] >> 12) & 0x000F;
+    }
+
     generateFlatTerrain(groundHeight) {
         for (let x = 0; x < this.width; x++) {
             for (let z = 0; z < this.width; z++) {
@@ -106,6 +124,34 @@ export class VoxelChunk {
             return 0; // Default to no light for out-of-bounds
         }
 
+        const getSafeSkyLight = (x, y, z) => {
+            if (x >= 0 && x < this.width && y >= 0 && y < this.height && z >= 0 && z < this.width) {
+                return this.getSkyLight(x, y, z);
+            }
+
+            if (manager) {
+                const globalX = x + (cx * this.width);
+                const globalZ = z + (cz * this.width);
+
+                return manager.getSkyLight(globalX, y, globalZ);
+            }
+            return 15;
+        }
+
+        const isSolid = (x, y, z) => {
+            const blockId = getSafeBlock(x, y, z);
+            if (blockId === 0) return false; // AIR is not solid
+
+            const data = this.blockRegistry[blockId.toString()];
+
+            return !(data && data.transparent); // Solid if not transparent
+        }
+
+        const vertexAO = (side1, side2, corner) => {
+            if (side1 && side2) return 0;
+            return 3 - (side1 + side2 + corner);
+        }
+
         const axes = [
             { name: 'Y', sliceDir: [0, 1, 0], widthAxis: 'X', heightAxis: 'Z' },
             { name: 'X', sliceDir: [1, 0, 0], widthAxis: 'Z', heightAxis: 'Y' },
@@ -160,8 +206,10 @@ export class VoxelChunk {
 
                             if (drawFace) {
                                 const neighborLight = getSafeLight(neighborX, neighborY, neighborZ);
+                                const neighborSkyLight = getSafeSkyLight(neighborX, neighborY, neighborZ);
 
-                                mask[w + (h * wLimit)] = currentBlock | (neighborLight << 8); // Pack block ID and light level together for later use
+                                // Pack block ID (8), light(4), and skylight (4) into a single integer for the mask
+                                mask[w + (h * wLimit)] = currentBlock | (neighborLight << 8) | (neighborSkyLight << 12);
                             }
                         }
                     }
@@ -177,38 +225,45 @@ export class VoxelChunk {
 
                             const blockId = maskVal & 0x00FF;
 
-                            // Step A: Stretch the Width (Rightwards)
                             let width = 1;
-                            while (w + width < this.width && mask[(w + width) + h * this.width] === blockId) {
-                                width++;
-                            }
-
-                            // Step B: Stretch the Height (Downwards)
                             let height = 1;
-                            let done = false;
 
-                            while (h + height < this.height && !done) {
-                                for (let checkW = 0; checkW < width; checkW++) {
-                                    if (mask[(w + checkW) + (h + height) * this.width] !== blockId) {
-                                        done = true;
-                                        break;
-                                    }
-                                }
-                                if (!done) height++;
+                            let x = (axis.name === 'X') ? slice : (axis.widthAxis === 'X' ? w : h);
+                            let y = (axis.name === 'Y') ? slice : (axis.widthAxis === 'Y' ? w : h);
+                            let z = (axis.name === 'Z') ? slice : (axis.widthAxis === 'Z' ? w : h);
+
+                            const dx = (axis.name === 'X') ? dirMultiplier : 0;
+                            const dy = (axis.name === 'Y') ? dirMultiplier : 0;
+                            const dz = (axis.name === 'Z') ? dirMultiplier : 0;
+
+                            const uDir = axis.name === 'X' ? [0, 0, 1] : [1, 0, 0];
+                            const vDir = axis.name === 'Y' ? [0, 0, 1] : [0, 1, 0];
+
+                            const s00 = isSolid(x + dx - uDir[0] - vDir[0], y + dy - uDir[1] - vDir[1], z + dz - uDir[2] - vDir[2]);
+                            const s10 = isSolid(x + dx - vDir[0], y + dy - vDir[1], z + dz - vDir[2]);
+                            const s20 = isSolid(x + dx + uDir[0] - vDir[0], y + dy + uDir[1] - vDir[1], z + dz + uDir[2] - vDir[2]);
+                            const s01 = isSolid(x + dx - uDir[0], y + dy - uDir[1], z + dz - uDir[2]);
+                            const s21 = isSolid(x + dx + uDir[0], y + dy + uDir[1], z + dz + uDir[2]);
+                            const s02 = isSolid(x + dx - uDir[0] + vDir[0], y + dy - uDir[1] + vDir[1], z + dz - uDir[2] + vDir[2]);
+                            const s12 = isSolid(x + dx + vDir[0], y + dy + vDir[1], z + dz + vDir[2]);
+                            const s22 = isSolid(x + dx + uDir[0] + vDir[0], y + dy + uDir[1] + vDir[1], z + dz + uDir[2] + vDir[2]);
+
+                            const ao00 = vertexAO(s01, s10, s00); // Bottom Left
+                            const ao20 = vertexAO(s21, s10, s20); // Bottom Right
+                            const ao22 = vertexAO(s21, s12, s22); // Top Right
+                            const ao02 = vertexAO(s01, s12, s02); // Top Left
+
+                            let aoValues = [ao00, ao20, ao22, ao02];
+
+                            if (axis.name === 'X' || axis.name === 'Y') {
+                                aoValues = dirMultiplier === 1 ? [ao00, ao20, ao22, ao02] : [ao20, ao00, ao02, ao22];
                             }
 
                             // Step C: Generate the 4 corners.
-                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount);
+                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount, aoValues);
                             vertexCount += 4;
 
-                            // Step D: Zero-out the mask
-                            for (let clearH = 0; clearH < height; clearH++) {
-                                for (let clearW = 0; clearW < width; clearW++) {
-                                    mask[(w + clearW) + (h + clearH) * this.width] = 0;
-                                }
-                            }
-
-                            w += width - 1; // Skip processed cells
+                            mask[w + (h * this.width)] = 0; // Mark as processed
                         }
                     }
                 }
@@ -218,7 +273,7 @@ export class VoxelChunk {
     }
 
     //  --- PHASE 3: GENERATE THE GEOMETRY ---
-    generateOptimizedQuad(axis, dir, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount) {
+    generateOptimizedQuad(axis, dir, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount, aoValues = [3, 3, 3, 3]) {
         const xOffset = axis.name === 'X' ? (dir === 1 ? 1 : 0) : 0;
         const yOffset = axis.name === 'Y' ? (dir === 1 ? 1 : 0) : 0;
         const zOffset = axis.name === 'Z' ? (dir === 1 ? 1 : 0) : 0;
@@ -227,6 +282,7 @@ export class VoxelChunk {
 
         const blockId = maskVal & 0x00FF;
         const lightValue = (maskVal >> 8) & 0x000F;
+        const skyLightValue = (maskVal >> 12) & 0x000F;
 
         const blockData = this.blockRegistry[blockId.toString()];
 
@@ -241,7 +297,6 @@ export class VoxelChunk {
         const corners = [
             [w, h], [w + width, h], [w + width, h + height], [w, h + height]
         ]
-
         const uvCoords = [[0, 0], [width, 0], [width, height], [0, height]]
 
         for (let i = 0; i < 4; i++) {
@@ -260,8 +315,12 @@ export class VoxelChunk {
                 ((uvCoords[i][0] & 31) << 18) |  // 5 bits for U (0-31)
                 ((uvCoords[i][1] & 255) << 23);   // 8 bits for V (0-255)
 
+            const cornerAO = aoValues[i] & 3; // 2 bits for AO (0-3)
+
             const data2 = (texLayer & 255) | // 8 bits for texture layer (0-255)
-                ((lightValue & 15) << 8);          // 4 bits for light level (0-15)
+                ((lightValue & 15) << 8) |  // 4 bits for light level (0-15)
+                ((skyLightValue & 15) << 12) |    // 4 bits for skylight level (0-15)
+                (cornerAO << 16);               // 2 bits for AO (0-3)
 
             packedData.push(data1, data2);
         }

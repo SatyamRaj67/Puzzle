@@ -399,4 +399,17 @@ export class ChunkManager {
             this.rebuildChunkMesh(cx, cz);
         }
     }
+
+    getSkyLight(worldX, worldY, worldZ) {
+        const cx = Math.floor(worldX / this.chunkWidth);
+        const cz = Math.floor(worldZ / this.chunkWidth);
+        const key = this.getChunkKey(cx, cz);
+
+        if (!this.chunks.has(key)) return 15; // If chunk unloaded, treat them as dark
+
+        const localX = worldX - (cx * this.chunkWidth);
+        const localZ = worldZ - (cz * this.chunkWidth);
+        
+        return this.chunks.get(key).getSkyLight(localX, worldY, localZ);
+    }
 }

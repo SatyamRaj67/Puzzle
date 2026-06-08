@@ -9,6 +9,8 @@ uniform mat4 u_model;
 out vec3 v_uv;
 out vec3 v_worldPos;
 out float v_light;
+out float v_skyLight;
+out float v_ao;
 
 void main() {
     // === BITWISE UNPACKING ===
@@ -22,6 +24,10 @@ void main() {
     float layer = float(a_data2 & 255u);
 
     v_light = float((a_data2 >> 8u) & 15u) / 15.0; // Bits 8-11
+    v_skyLight = float((a_data2 >> 12u) & 15u) / 15.0; // Bits 12-15
+
+    float aoRaw = float((a_data2 >> 16u) & 3u);
+    v_ao = 0.4 + (aoRaw * 0.2); // Map 0-3 to 0.4-1.0 for better contrast
 
     vec3 pos = vec3(x, y, z);
 
@@ -40,6 +46,8 @@ precision highp sampler2DArray;
 in vec3 v_uv;
 in vec3 v_worldPos;
 in float v_light;
+in float v_skyLight;
+in float v_ao;
 
 uniform sampler2DArray u_texture;
 uniform float u_alpha;
@@ -56,18 +64,23 @@ void main() {
 
     vec3 normal = normalize(cross(dFdx(v_worldPos), dFdy(v_worldPos)));
     vec3 sunDir = normalize(u_sunDirection);
-    float sunHeight = max(sunDir.y, 0.0);
+    float sunHeight = clamp(sunDir.y, -0.2, 0.2) / 0.2;
 
-    float diffuse = max(dot(normal, sunDir), 0.0) * sunHeight;
-    float ambient = 0.05 + (0.25 * sunHeight);
+    float dayFactor = (sunHeight + 1.0) / 2.0;
+
+    float diffuse = max(dot(normal, sunDir), 0.0) * max(sunDir.y, 0.0);
+    float ambient = 0.05 + (0.2 * max(sunDir.y, 0.0));
+
+    float activeSkyLight = v_skyLight * dayFactor;
 
     float distToPlayer = distance(v_worldPos, u_playerPos);
-    float torchGlow = max(0.0, 1.0 - (distToPlayer / 12.0));
-    torchGlow = pow(torchGlow, 2.0);
-
+    float torchGlow = pow(max(0.0, 1.0 - (distToPlayer / 12.0)), 2.0);
     float activeTorchLight = torchGlow * u_holdingTorch;
 
-    float lightIntensity = max(diffuse + ambient, max(v_light, activeTorchLight));
+    float maxIllumination = max(v_light, max(activeSkyLight, activeTorchLight));
+    float lightIntensity = max(diffuse + ambient, maxIllumination);
+
+    lightIntensity *= v_ao;
 
     outColor = vec4(texColor.rgb * lightIntensity, texColor.a * u_alpha);
 }

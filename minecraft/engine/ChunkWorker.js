@@ -42,8 +42,28 @@ self.onmessage = function (event) {
                 const isForest = treeNoise.get(globalX * 0.05, globalZ * 0.05) > 0.6;
 
                 if (isForest && Math.random() < 0.05) {
-                    FeatureGenerator.generateOakTree(chunk, x, surfaceY + 1, z, BLOCKS  );
+                    FeatureGenerator.generateOakTree(chunk, x, surfaceY + 1, z, BLOCKS);
                 }
+            }
+        }
+    }
+
+    // === SUNLIGHT PASS ===
+    for (let x = 0; x < chunkWidth; x++) {
+        for (let z = 0; z < chunkWidth; z++) {
+            let skylight = 15; // Max light level
+
+            for (let y = chunkHeight - 1; y >= 0; y--) {
+                const blockId = chunk.getBlock(x, y, z);
+
+                const blockData = BLOCKS[blockId]
+                const isTransparent = blockId === 0 || (blockData && blockData.transparent);
+
+                if (!isTransparent) {
+                    skylight = 0; // Block sunlight
+                }
+
+                chunk.setSkyLight(x, y, z, skylight);
             }
         }
     }
