@@ -215,13 +215,12 @@ input[type="range"]::-webkit-slider-thumb {
 
 #inventory-grid{
     display: grid;
-    grid-template-columns: repeat(9, 2em);
-    grid-gap: 0.25em;
+    grid-template-columns: repeat(9, 2.25em);
 }
 
 #inventory-grid .inventory-slot{
-    width: 2em;
-    height: 2em;
+    width: 2.25em;
+    height: 2.25em;
     border: 2px solid #777;
     display: flex;
     align-items: center;

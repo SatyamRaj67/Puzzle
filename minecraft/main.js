@@ -14,7 +14,7 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 // === HELPER FUNCTIONS ===
-// --- Asset Loading
+// --- Asset Loading ---
 async function loadImages(urls) {
     const promises = urls.map(url => {
         return new Promise((resolve, reject) => {
@@ -93,12 +93,14 @@ async function initGame() {
 
     // === UI & MENU === 
     // --- Pause Menu
+
     const pauseMenu = document.getElementById('pause-menu');
     document.addEventListener('pointerlockchange', () => {
         if (document.pointerLockElement === canvas) {
             pauseMenu.style.display = 'none';
             lastFrameTime = performance.now();
         } else {
+            if (isInventoryOpen) return;
             pauseMenu.style.display = 'flex';
         }
     })
@@ -198,7 +200,7 @@ async function initGame() {
                 updateInventoryUI();
             } else {
                 isInventoryOpen = true;
-                inventoryMenu.style.display = 'block';
+                inventoryMenu.style.display = 'flex';
                 document.exitPointerLock();
                 updateInventoryUI();
             }
@@ -264,8 +266,6 @@ async function initGame() {
                 const slot = document.createElement('div');
                 slot.classList.add('inventory-slot');
                 inventoryGrid.appendChild(slot);
-
-                if (i === 9) slot.style.marginTop = '0.5em';
 
                 const blockId = inventory[i];
                 if (blockId !== BLOCKS.AIR) {
