@@ -72,13 +72,14 @@ void main() {
     float ambient = 0.05 + (0.2 * max(sunDir.y, 0.0));
 
     float activeSkyLight = v_skyLight * dayFactor;
+    float naturalSunlight = (diffuse + ambient) * activeSkyLight;
 
     float distToPlayer = distance(v_worldPos, u_playerPos);
     float torchGlow = pow(max(0.0, 1.0 - (distToPlayer / 12.0)), 2.0);
     float activeTorchLight = torchGlow * u_holdingTorch;
 
-    float maxIllumination = max(v_light, max(activeSkyLight, activeTorchLight));
-    float lightIntensity = max(diffuse + ambient, maxIllumination);
+    float maxIllumination = max(v_light, max(naturalSunlight, activeTorchLight));
+    float lightIntensity = maxIllumination + 0.02;
 
     lightIntensity *= v_ao;
 

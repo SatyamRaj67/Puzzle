@@ -14,7 +14,12 @@ export class ChunkManager {
         this.freeBuffers = [];
 
         this.chunkWidth = 16;
-        this.renderDistance = 2; // 5 x 5 grid of chunks around the player
+        this.renderDistance = 4; // 9 x 9 grid of chunks around the player
+
+        this.meshingQueue = [];
+        this.queuedMeshes = new Set();
+        this.lastPlayerCX = null;
+        this.lastPlayerCZ = null;
 
         this.worker = new Worker(new URL('./ChunkWorker.js', import.meta.url), { type: 'module' });
 
@@ -29,12 +34,11 @@ export class ChunkManager {
             this.chunks.set(key, chunk);
             this.pendingChunks.delete(key);
 
-            this.rebuildChunkMesh(cx, cz);
-
-            this.rebuildChunkMesh(cx + 1, cz);
-            this.rebuildChunkMesh(cx - 1, cz);
-            this.rebuildChunkMesh(cx, cz + 1);
-            this.rebuildChunkMesh(cx, cz - 1);
+            this.queueMesh(cx, cz);
+            this.queueMesh(cx + 1, cz);
+            this.queueMesh(cx - 1, cz);
+            this.queueMesh(cx, cz + 1);
+            this.queueMesh(cx, cz - 1);
         }
     }
 
@@ -46,58 +50,78 @@ export class ChunkManager {
         const currentCX = Math.floor(playerX / this.chunkWidth);
         const currentCZ = Math.floor(playerZ / this.chunkWidth);
 
-        const chunksToLoad = [];
+        let meshesBuilt = 0;
 
-        for (let x = -this.renderDistance; x <= this.renderDistance; x++) {
-            for (let z = -this.renderDistance; z <= this.renderDistance; z++) {
-                const cx = currentCX + x;
-                const cz = currentCZ + z;
-                const key = this.getChunkKey(cx, cz);
+        while (this.meshingQueue.length > 0 && meshesBuilt < 2) {
+            const target = this.meshingQueue.shift();
+            this.queuedMeshes.delete(target.key);
+            this.rebuildChunkMesh(target.cx, target.cz, currentCX, currentCZ);
+            meshesBuilt++;
+        }
 
-                if (!this.chunks.has(key) && !this.pendingChunks.has(key)) {
-                    const distancePacked = (x * x) + (z * z);
-                    chunksToLoad.push({ cx, cz, key, distancePacked })
+        if (this.lastPlayerCX !== currentCX || this.lastPlayerCZ !== currentCZ) {
+            this.lastPlayerCX = currentCX;
+            this.lastPlayerCZ = currentCZ;
+
+            const chunkLoadQueue = [];
+
+            for (let x = -this.renderDistance; x <= this.renderDistance; x++) {
+                for (let z = -this.renderDistance; z <= this.renderDistance; z++) {
+                    const cx = currentCX + x;
+                    const cz = currentCZ + z;
+                    const key = this.getChunkKey(cx, cz);
+
+                    if (!this.chunks.has(key) && !this.pendingChunks.has(key)) {
+                        const distancePacked = (x * x) + (z * z);
+                        chunkLoadQueue.push({ cx, cz, key, distancePacked });
+                    }
                 }
             }
-        }
 
-        chunksToLoad.sort((a, b) => a.distancePacked - b.distancePacked);
+            chunkLoadQueue.sort((a, b) => a.distancePacked - b.distancePacked);
 
-        for (const target of chunksToLoad) {
-            this.pendingChunks.add(target.key);
+            for (const target of chunkLoadQueue) {
+                this.pendingChunks.add(target.key);
+                const bufferToRecycle = this.freeBuffers.length > 0 ? this.freeBuffers.pop() : null;
+                const transferList = bufferToRecycle ? [bufferToRecycle] : [];
 
-            const bufferToRecycle = this.freeBuffers.length > 0 ? this.freeBuffers.pop() : null;
+                this.worker.postMessage({
+                    cx: target.cx,
+                    cz: target.cz,
+                    chunkWidth: this.chunkWidth,
+                    chunkHeight: 128,
+                    recycledBuffer: bufferToRecycle
+                }, transferList)
+            }
 
-            const transferList = bufferToRecycle ? [bufferToRecycle] : [];
+            const unloadRadius = this.renderDistance + 2;
+            for (const key of this.chunks.keys()) {
+                const [cx, cz] = key.split(',').map(Number);
 
-            this.worker.postMessage({
-                cx: target.cx,
-                cz: target.cz,
-                chunkWidth: this.chunkWidth,
-                chunkHeight: 128,
-                recycledBuffer: bufferToRecycle
-            }, transferList);
-        }
+                if (Math.abs(cx - currentCX) > unloadRadius || Math.abs(cz - currentCZ) > unloadRadius) {
+                    if (this.meshes.has(key)) {
+                        this.renderer.deleteMesh(this.meshes.get(key).gpuMesh);
+                        this.meshes.delete(key);
+                    }
 
-        const unloadRadius = this.renderDistance + 2;
-
-        for (const key of this.chunks.keys()) {
-            const [cx, cz] = key.split(',').map(Number);
-
-            const distanceX = Math.abs(cx - currentCX);
-            const distanceZ = Math.abs(cz - currentCZ);
-
-            if (distanceX > unloadRadius || distanceZ > unloadRadius) {
-                if (this.meshes.has(key)) {
-                    const gpuResource = this.meshes.get(key);
-                    this.renderer.deleteMesh(gpuResource.gpuMesh);
-                    this.meshes.delete(key);
+                    this.freeBuffers.push(this.chunks.get(key).data.buffer);
+                    this.chunks.delete(key);
                 }
+            }
 
-                const chunkToDelete = this.chunks.get(key);
-                this.freeBuffers.push(chunkToDelete.data.buffer);
+            for (const [key, gpuResource] of this.meshes.entries()) {
+                const [cx, cz] = key.split(',').map(Number);
 
-                this.chunks.delete(key);
+                const dist = Math.max(Math.abs(cx - currentCX), Math.abs(cz - currentCZ));
+                let desiredLod = 1;
+                if (dist >= 48) desiredLod = 16;
+                else if (dist >= 32) desiredLod = 8;
+                else if (dist >= 24) desiredLod = 4;
+                else if (dist >= 16) desiredLod = 2;
+
+                if (gpuResource.currentLod !== desiredLod) {
+                    this.queueMesh(cx, cz);
+                }
             }
         }
     }
@@ -109,21 +133,29 @@ export class ChunkManager {
         chunk.generateProceduralTerrain(this.noise, cx * this.chunkWidth, cz * this.chunkWidth);
 
         this.chunks.set(key, chunk);
-        this.rebuildChunkMesh(cx, cz);
 
-        this.rebuildChunkMesh(cx + 1, cz);
-        this.rebuildChunkMesh(cx - 1, cz);
-        this.rebuildChunkMesh(cx, cz + 1);
-        this.rebuildChunkMesh(cx, cz - 1);
+        this.meshingQueue.push({ cx, cz });
+
+        this.meshingQueue.push({ cx: cx + 1, cz });
+        this.meshingQueue.push({ cx: cx - 1, cz });
+        this.meshingQueue.push({ cx, cz: cz + 1 });
+        this.meshingQueue.push({ cx, cz: cz - 1 });
     }
 
-    rebuildChunkMesh(cx, cz) {
+    rebuildChunkMesh(cx, cz, playerCX, playerCZ) {
         const key = this.getChunkKey(cx, cz);
         if (!this.chunks.has(key)) return; // Can't rebuild mesh for non-existent chunk
 
-        const chunk = this.chunks.get(key);
+        const dist = Math.max(Math.abs(cx - playerCX), Math.abs(cz - playerCZ));
+        let lodStep = 1;
 
-        const meshData = chunk.buildMesh(this, cx, cz);
+        if (dist >= 32) lodStep = 16;
+        else if (dist >= 24) lodStep = 8;
+        else if (dist >= 16) lodStep = 4;
+        else if (dist >= 8) lodStep = 2;
+
+        const chunk = this.chunks.get(key);
+        const meshData = chunk.buildMesh(this, cx, cz, lodStep);
 
         const vertexArray = new Uint32Array(meshData.packedData);
         const indexArray = new Uint32Array(meshData.indices);
@@ -144,6 +176,8 @@ export class ChunkManager {
                 vertexArray,
                 indexArray
             )
+
+            gpuResource.currentLod = lodStep;
         } else {
             const mesh = this.renderer.createMesh(vertexArray, indexArray);
             const modelMatrix = new Float32Array([
@@ -152,7 +186,15 @@ export class ChunkManager {
                 0, 0, 1, 0,
                 cx * this.chunkWidth, 0, cz * this.chunkWidth, 1 // Translation Offset
             ])
-            this.meshes.set(key, { gpuMesh: mesh, model: modelMatrix });
+            this.meshes.set(key, { gpuMesh: mesh, model: modelMatrix, currentLod: lodStep });
+        }
+    }
+
+    queueMesh(cx, cz) {
+        const key = this.getChunkKey(cx, cz);
+        if (!this.queuedMeshes.has(key)) {
+            this.meshingQueue.push({ cx, cz, key });
+            this.queuedMeshes.add(key);
         }
     }
 
@@ -199,6 +241,8 @@ export class ChunkManager {
     }
 
     getBlock(worldX, worldY, worldZ) {
+        if (worldY < 0 || worldY >= 128) return 0; // Out of vertical bounds, treat as air
+
         const cx = Math.floor(worldX / this.chunkWidth);
         const cz = Math.floor(worldZ / this.chunkWidth);
         const key = this.getChunkKey(cx, cz);
@@ -212,6 +256,8 @@ export class ChunkManager {
     }
 
     setBlock(worldX, worldY, worldZ, blockId) {
+        if (worldY < 0 || worldY >= 128) return; // Out of vertical bounds, ignore
+
         const cx = Math.floor(worldX / this.chunkWidth);
         const cz = Math.floor(worldZ / this.chunkWidth);
         const key = this.getChunkKey(cx, cz);
@@ -269,14 +315,16 @@ export class ChunkManager {
 
         this.updateSkyLightColumn(worldX, worldZ);
 
-        this.rebuildChunkMesh(cx, cz);
-        if (localX === 0) this.rebuildChunkMesh(cx - 1, cz);
-        if (localX === this.chunkWidth - 1) this.rebuildChunkMesh(cx + 1, cz);
-        if (localZ === 0) this.rebuildChunkMesh(cx, cz - 1);
-        if (localZ === this.chunkWidth - 1) this.rebuildChunkMesh(cx, cz + 1);
+        this.rebuildChunkMesh(cx, cz, this.lastPlayerCX, this.lastPlayerCZ);
+        if (localX === 0) this.rebuildChunkMesh(cx - 1, cz, this.lastPlayerCX, this.lastPlayerCZ);
+        if (localX === this.chunkWidth - 1) this.rebuildChunkMesh(cx + 1, cz, this.lastPlayerCX, this.lastPlayerCZ);
+        if (localZ === 0) this.rebuildChunkMesh(cx, cz - 1, this.lastPlayerCX, this.lastPlayerCZ);
+        if (localZ === this.chunkWidth - 1) this.rebuildChunkMesh(cx, cz + 1, this.lastPlayerCX, this.lastPlayerCZ);
     }
 
     getLight(worldX, worldY, worldZ) {
+        if (worldY < 0 || worldY >= 128) return 0; // Out of vertical bounds, treat as dark
+
         const cx = Math.floor(worldX / this.chunkWidth);
         const cz = Math.floor(worldZ / this.chunkWidth);
         const key = this.getChunkKey(cx, cz);
@@ -289,6 +337,8 @@ export class ChunkManager {
     }
 
     setLight(worldX, worldY, worldZ, lightLevel) {
+        if (worldY < 0 || worldY >= 128) return; // Out of vertical bounds, ignore
+
         const cx = Math.floor(worldX / this.chunkWidth);
         const cz = Math.floor(worldZ / this.chunkWidth);
         const key = this.getChunkKey(cx, cz);
@@ -302,95 +352,122 @@ export class ChunkManager {
     }
 
     removeLight(startX, startY, startZ, oldLight) {
-        const queue = [
-            { x: startX, y: startY, z: startZ, light: oldLight }
-        ]
+        // Pre-allocate a large flat array. 200000 slots = 50000 nodes (x, y, z, light)
+        const queue = new Int32Array(200000)
+        let head = 0;
+        let tail = 0;
 
-        const fillQueue = [];
+        const fillQueue = new Int32Array(200000);
+        let fillTail = 0;
 
         const chunksToRebuild = new Set();
-
         this.setLight(startX, startY, startZ, 0);
 
+        queue[tail++] = startX;
+        queue[tail++] = startY;
+        queue[tail++] = startZ;
+        queue[tail++] = oldLight;
+
         const directions = [
-            [1, 0, 0],
-            [-1, 0, 0],
-            [0, 1, 0],
-            [0, -1, 0],
-            [0, 0, 1],
-            [0, 0, -1]
+            1, 0, 0,
+            -1, 0, 0,
+            0, 1, 0,
+            0, -1, 0,
+            0, 0, 1,
+            0, 0, -1
         ]
 
-        while (queue.length > 0) {
-            const { x, y, z, light } = queue.shift();
+        while (head < tail) {
+            const x = queue[head++];
+            const y = queue[head++];
+            const z = queue[head++];
+            const light = queue[head++];
 
             chunksToRebuild.add(`${Math.floor(x / this.chunkWidth)},${Math.floor(z / this.chunkWidth)}`);
 
-            for (const d of directions) {
-                const nx = x + d[0];
-                const ny = y + d[1];
-                const nz = z + d[2];
+            for (let i = 0; i < 18; i += 3) {
+                const nx = x + directions[i];
+                const ny = y + directions[i + 1];
+                const nz = z + directions[i + 2];
 
                 const neighborLight = this.getLight(nx, ny, nz);
 
+
                 if (neighborLight !== 0 && neighborLight < light) {
                     this.setLight(nx, ny, nz, 0);
-                    queue.push({ x: nx, y: ny, z: nz, light: neighborLight });
+                    queue[tail++] = nx;
+                    queue[tail++] = ny;
+                    queue[tail++] = nz;
+                    queue[tail++] = neighborLight;
                 }
                 else if (neighborLight >= light) {
-                    fillQueue.push({ x: nx, y: ny, z: nz, light: neighborLight });
+                    fillQueue[fillTail++] = nx;
+                    fillQueue[fillTail++] = ny;
+                    fillQueue[fillTail++] = nz;
+                    fillQueue[fillTail++] = neighborLight;
                 }
             }
         }
 
-        for (const node of fillQueue) {
-            this.floodFillLight(node.x, node.y, node.z, node.light);
+        for (let i = 0; i < fillTail; i += 4) {
+            this.floodFillLight(fillQueue[i], fillQueue[i + 1], fillQueue[i + 2], fillQueue[i + 3]);
         }
 
         for (const key of chunksToRebuild) {
             const [cx, cz] = key.split(',').map(Number);
-            this.rebuildChunkMesh(cx, cz);
+            this.queueMesh(cx, cz);
         }
     }
 
     floodFillLight(startX, startY, startZ, startLight) {
-        const queue = [{ x: startX, y: startY, z: startZ, light: startLight }];
+        const queue = new Int32Array(200000)
+        let head = 0;
+        let tail = 0;
 
+        queue[tail++] = startX;
+        queue[tail++] = startY;
+        queue[tail++] = startZ;
+        queue[tail++] = startLight;
         this.setLight(startX, startY, startZ, startLight);
 
         const directions = [
-            [1, 0, 0],
-            [-1, 0, 0],
-            [0, 1, 0],
-            [0, -1, 0],
-            [0, 0, 1],
-            [0, 0, -1]
+            1, 0, 0,
+            -1, 0, 0,
+            0, 1, 0,
+            0, -1, 0,
+            0, 0, 1,
+            0, 0, -1
         ]
 
         const chunksToRebuild = new Set();
 
-        while (queue.length > 0) {
-            const { x, y, z, light } = queue.shift();
+        while (head < tail) {
+            const x = queue[head++];
+            const y = queue[head++];
+            const z = queue[head++];
+            const light = queue[head++];
 
             chunksToRebuild.add(`${Math.floor(x / this.chunkWidth)},${Math.floor(z / this.chunkWidth)}`);
 
             if (light <= 1) continue;
 
-            for (const d of directions) {
-                const nx = x + d[0];
-                const ny = y + d[1];
-                const nz = z + d[2];
+            for (let i = 0; i < 18; i += 3) {
+                const nx = x + directions[i];
+                const ny = y + directions[i + 1];
+                const nz = z + directions[i + 2];
 
                 const neighborBlock = this.getBlock(nx, ny, nz);
+                const neighborBlockData = this.blockRegistry[neighborBlock];
 
-                const blockData = this.blockRegistry[neighborBlock];
-
-                if (neighborBlock === 0 || (blockData && blockData.transparent)) {
+                if (neighborBlock === 0 || (neighborBlockData && neighborBlockData.transparent)) {
                     const currentNeighborLight = this.getLight(nx, ny, nz);
 
                     if (currentNeighborLight < light - 2) {
                         this.setLight(nx, ny, nz, light - 2);
-                        queue.push({ x: nx, y: ny, z: nz, light: light - 2 });
+                        queue[tail++] = nx;
+                        queue[tail++] = ny;
+                        queue[tail++] = nz;
+                        queue[tail++] = light - 2;
                     }
                 }
             }
@@ -398,11 +475,14 @@ export class ChunkManager {
 
         for (const key of chunksToRebuild) {
             const [cx, cz] = key.split(',').map(Number);
-            this.rebuildChunkMesh(cx, cz);
+            this.queueMesh(cx, cz);
         }
     }
 
     getSkyLight(worldX, worldY, worldZ) {
+        if (worldY < 0) return 0; // Below world, treat as dark
+        if (worldY >= 128) return 15; // Above world, treat as fully lit
+
         const cx = Math.floor(worldX / this.chunkWidth);
         const cz = Math.floor(worldZ / this.chunkWidth);
         const key = this.getChunkKey(cx, cz);
@@ -411,7 +491,7 @@ export class ChunkManager {
 
         const localX = worldX - (cx * this.chunkWidth);
         const localZ = worldZ - (cz * this.chunkWidth);
-        
+
         return this.chunks.get(key).getSkyLight(localX, worldY, localZ);
     }
 

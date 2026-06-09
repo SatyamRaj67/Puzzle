@@ -3,26 +3,32 @@
         "grass": {
             "Top": "textures/model/grass_block_top.png",
             "Bottom": "textures/model/dirt.png",
-            "Side": "textures/model/grass_block_side.png"
+            "Side": "textures/model/grass_block_side.png",
+            "icon": "textures/icon/grass_block.png"
         },
         "dirt": {
-            "All": "textures/model/dirt.png"
+            "All": "textures/model/dirt.png",
+            "icon": "textures/icon/dirt.png"
         },
         "stone": {
-            "All": "textures/model/stone.png"
+            "All": "textures/model/stone.png",
+            "icon": "textures/icon/stone.png"
         },
         "oak_log": {
             "Top": "textures/model/oak_log_top.png",
             "Bottom": "textures/model/oak_log_top.png",
-            "Side": "textures/model/oak_log.png"
+            "Side": "textures/model/oak_log.png",
+            "icon": "textures/icon/oak_log.png"
         },
         "oak_leaves": {
             "All": "textures/model/oak_leaves.png",
-            "transparent": true
+            "transparent": true,
+            "icon": "textures/icon/oak_leaves.png"
         },
         "glowstone": {
             "All": "textures/model/glowstone.png",
-            "light": 15
+            "light": 15,
+            "icon": "textures/icon/glowstone.png"
         }
     },
     "system": {

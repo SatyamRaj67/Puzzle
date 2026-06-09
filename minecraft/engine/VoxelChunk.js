@@ -91,7 +91,7 @@ export class VoxelChunk {
     // THE GREEDY MESHER
     // ==========================================
 
-    buildMesh(manager, cx, cz) {
+    buildMesh(manager, cx, cz, lodStep = 1) {
         const packedData = [], indices = [];
         let vertexCount = 0;
 
@@ -166,29 +166,28 @@ export class VoxelChunk {
                     faceName = (dirMultiplier === 1) ? 'Top' : 'Bottom';
                 }
 
-                const wLimit = this.width;
-                const hLimit = (axis.name === 'Y') ? this.width : this.height;
+                const wLimit = Math.floor(this.width / lodStep);
+                const hLimit = Math.floor((axis.name === 'Y') ? this.width : this.height) / lodStep;
 
                 for (let slice = 0; slice < (axis.name === 'Y' ? this.height : this.width); slice++) {
-                    const mask = new Int32Array(this.width * this.height);
+                    const mask = new Int32Array(wLimit * hLimit);
 
                     // --- PHASE 1: BUILD THE MASK ---
                     // We scan the entire 2D slice to find visible block faces
-
                     for (let w = 0; w < wLimit; w++) {
                         for (let h = 0; h < hLimit; h++) {
                             // Map 2D (w, h) coordinates back to 3D (x, y, z)
-                            let x = (axis.name === 'X') ? slice : (axis.widthAxis === 'X' ? w : h);
-                            let y = (axis.name === 'Y') ? slice : (axis.widthAxis === 'Y' ? w : h);
-                            let z = (axis.name === 'Z') ? slice : (axis.widthAxis === 'Z' ? w : h);
+                            let x = (axis.name === 'X') ? slice * lodStep : (axis.widthAxis === 'X' ? w * lodStep : h * lodStep);
+                            let y = (axis.name === 'Y') ? slice * lodStep : (axis.widthAxis === 'Y' ? w * lodStep : h * lodStep);
+                            let z = (axis.name === 'Z') ? slice * lodStep : (axis.widthAxis === 'Z' ? w * lodStep : h * lodStep);
 
                             const currentBlock = this.getBlock(x, y, z);
 
                             if (currentBlock == 0) continue; // Skip air blocks
 
-                            const neighborX = x + (axis.name === 'X' ? dirMultiplier : 0);
-                            const neighborY = y + (axis.name === 'Y' ? dirMultiplier : 0);
-                            const neighborZ = z + (axis.name === 'Z' ? dirMultiplier : 0);
+                            const neighborX = x + (axis.name === 'X' ? dirMultiplier * lodStep : 0);
+                            const neighborY = y + (axis.name === 'Y' ? dirMultiplier * lodStep : 0);
+                            const neighborZ = z + (axis.name === 'Z' ? dirMultiplier * lodStep : 0);
 
                             const neighborBlock = getSafeBlock(neighborX, neighborY, neighborZ);
 
@@ -228,16 +227,16 @@ export class VoxelChunk {
                             let width = 1;
                             let height = 1;
 
-                            let x = (axis.name === 'X') ? slice : (axis.widthAxis === 'X' ? w : h);
-                            let y = (axis.name === 'Y') ? slice : (axis.widthAxis === 'Y' ? w : h);
-                            let z = (axis.name === 'Z') ? slice : (axis.widthAxis === 'Z' ? w : h);
+                            let x = (axis.name === 'X') ? slice * lodStep : (axis.widthAxis === 'X' ? w * lodStep : h * lodStep);
+                            let y = (axis.name === 'Y') ? slice * lodStep : (axis.widthAxis === 'Y' ? w * lodStep : h * lodStep);
+                            let z = (axis.name === 'Z') ? slice * lodStep : (axis.widthAxis === 'Z' ? w * lodStep : h * lodStep);
 
-                            const dx = (axis.name === 'X') ? dirMultiplier : 0;
-                            const dy = (axis.name === 'Y') ? dirMultiplier : 0;
-                            const dz = (axis.name === 'Z') ? dirMultiplier : 0;
+                            const dx = (axis.name === 'X') ? dirMultiplier * lodStep : 0;
+                            const dy = (axis.name === 'Y') ? dirMultiplier * lodStep : 0;
+                            const dz = (axis.name === 'Z') ? dirMultiplier * lodStep : 0;
 
-                            const uDir = axis.name === 'X' ? [0, 0, 1] : [1, 0, 0];
-                            const vDir = axis.name === 'Y' ? [0, 0, 1] : [0, 1, 0];
+                            const uDir = axis.name === 'X' ? [0, 0, lodStep] : [lodStep, 0, 0];
+                            const vDir = axis.name === 'Y' ? [0, 0, lodStep] : [0, lodStep, 0];
 
                             const s00 = isSolid(x + dx - uDir[0] - vDir[0], y + dy - uDir[1] - vDir[1], z + dz - uDir[2] - vDir[2]);
                             const s10 = isSolid(x + dx - vDir[0], y + dy - vDir[1], z + dz - vDir[2]);
@@ -260,10 +259,10 @@ export class VoxelChunk {
                             }
 
                             // Step C: Generate the 4 corners.
-                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount, aoValues);
+                            this.generateOptimizedQuad(axis, dirMultiplier, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount, aoValues, lodStep);
                             vertexCount += 4;
 
-                            mask[w + (h * this.width)] = 0; // Mark as processed
+                            mask[w + (h * wLimit)] = 0; // Mark as processed
                         }
                     }
                 }
@@ -273,10 +272,16 @@ export class VoxelChunk {
     }
 
     //  --- PHASE 3: GENERATE THE GEOMETRY ---
-    generateOptimizedQuad(axis, dir, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount, aoValues = [3, 3, 3, 3]) {
-        const xOffset = axis.name === 'X' ? (dir === 1 ? 1 : 0) : 0;
-        const yOffset = axis.name === 'Y' ? (dir === 1 ? 1 : 0) : 0;
-        const zOffset = axis.name === 'Z' ? (dir === 1 ? 1 : 0) : 0;
+    generateOptimizedQuad(axis, dir, slice, w, h, width, height, maskVal, faceName, packedData, indices, vertexCount, aoValues = [3, 3, 3, 3], lodStep = 1) {
+        const xOffset = axis.name === 'X' ? (dir === 1 ? lodStep : 0) : 0;
+        const yOffset = axis.name === 'Y' ? (dir === 1 ? lodStep : 0) : 0;
+        const zOffset = axis.name === 'Z' ? (dir === 1 ? lodStep : 0) : 0;
+
+        const physicalW = w * lodStep;
+        const physicalH = h * lodStep;
+        const physicalWidth = width * lodStep;
+        const physicalHeight = height * lodStep;
+        const physicalSlice = slice * lodStep;
 
         let texLayer = 0;
 
@@ -295,16 +300,16 @@ export class VoxelChunk {
         }
 
         const corners = [
-            [w, h], [w + width, h], [w + width, h + height], [w, h + height]
+            [physicalW, physicalH], [physicalW + physicalWidth, physicalH], [physicalW + physicalWidth, physicalH + physicalHeight], [physicalW, physicalH + physicalHeight]
         ]
-        const uvCoords = [[0, 0], [width, 0], [width, height], [0, height]]
+        const uvCoords = [[0, 0], [physicalWidth, 0], [physicalWidth, physicalHeight], [0, physicalHeight]]
 
         for (let i = 0; i < 4; i++) {
             let cx = corners[i][0], cy = corners[i][1];
 
-            let finalX = (axis.name === 'X') ? slice + xOffset : (axis.widthAxis === 'X' ? cx : cy);
-            let finalY = (axis.name === 'Y') ? slice + yOffset : (axis.widthAxis === 'Y' ? cx : cy);
-            let finalZ = (axis.name === 'Z') ? slice + zOffset : (axis.widthAxis === 'Z' ? cx : cy);
+            let finalX = (axis.name === 'X') ? physicalSlice + xOffset : (axis.widthAxis === 'X' ? cx : cy);
+            let finalY = (axis.name === 'Y') ? physicalSlice + yOffset : (axis.widthAxis === 'Y' ? cx : cy);
+            let finalZ = (axis.name === 'Z') ? physicalSlice + zOffset : (axis.widthAxis === 'Z' ? cx : cy);
 
             // BITWISE PACKING
 

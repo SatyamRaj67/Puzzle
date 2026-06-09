@@ -14,9 +14,12 @@
   </head>
   <body>
     <canvas id="gameCanvas"></canvas>
+    <!-- === CROSS HAIR === -->
     <div class="crosshair"></div>
+    <!-- === DEBUG HUD === -->
     <div id="debug-hud">Press F3 to toggle</div>
 
+    <!-- === PAUSE MENU === -->
     <div id="pause-menu">
       <div class="menu-container">
         <h1>Game Menu</h1>
@@ -35,6 +38,7 @@
       </div>
     </div>
 
+    <!-- === OPTIONS MENU -->
     <div id="options-menu">
       <div class="menu-container">
         <div class="setting-group">
@@ -49,7 +53,7 @@
         </div>
 
         <div class="setting-group">
-          <label>Render: <span id="rd-val">2</span> Chunks</label>
+          <label>Render: <span id="rd-val">4</span> Chunks</label>
           <input
             type="range"
             id="rd-slider"
@@ -65,6 +69,7 @@
       </div>
     </div>
 
+    <!-- === DEVTOOLS MENU === -->
     <div id="devtools-menu">
       <div class="menu-container">
         <div class="setting-group">
@@ -91,6 +96,7 @@
       </div>
     </div>
 
+    <!-- === HOTBAR === -->
     <div id="hotbar">
       <div
         class="slot active"
@@ -139,11 +145,22 @@
         data-index="8"
       ></div>
     </div>
+
+    <!-- === INVENTORY === -->
+    <div id="inventory-menu" style="display: none;">
+      <h2>Inventory</h2>
+      <div id="inventory-grid">
+        <!-- Inventory slots will be generated here -->
+      </div>
+    </div>
+
+    <img
+      id="cursor-item"
+      src=""
+      alt="Cursor Item"
+    />
+    
   </body>
-  <script
-    type="module"
-    src="ui.js"
-  ></script>
   <script
     type="module"
     src="main.js"

@@ -59,6 +59,7 @@ async function initGame() {
     // === BLOCK REGISTRY SETUP ===
     const BLOCKS = { AIR: 0 };
     const BLOCK_DATA = { 0: null };
+    const BLOCK_ICONS = { 0: null };
 
     for (const [blockName, id] of Object.entries(compiledAssets.blockIds)) {
         BLOCKS[blockName.toUpperCase()] = id;
@@ -66,6 +67,7 @@ async function initGame() {
 
     for (const [blockName, config] of Object.entries(compiledAssets.blockRegistry)) {
         BLOCK_DATA[config.id] = config;
+        BLOCK_ICONS[config.id] = rawAssets.blocks[blockName].icon;
     }
 
     // Precompute highlight layer index for quick access in rendering
@@ -177,17 +179,135 @@ async function initGame() {
             showDebugInfo = !showDebugInfo;
             debugHUD.style.display = showDebugInfo ? 'block' : 'none';
         }
+
+        if (event.key.toLowerCase() === 'e') {
+            pauseMenu.style.display = 'none';
+            if (isInventoryOpen) {
+                isInventoryOpen = false;
+                inventoryMenu.style.display = 'none';
+
+                if (mouseHeldItem !== BLOCKS.AIR) {
+                    const emptySlot = inventory.indexOf(BLOCKS.AIR);
+                    if (emptySlot !== -1) {
+                        inventory[emptySlot] = mouseHeldItem;
+                    }
+                    mouseHeldItem = BLOCKS.AIR;
+                    cursorItemUI.style.display = 'none';
+                }
+                canvas.requestPointerLock();
+                updateInventoryUI();
+            } else {
+                isInventoryOpen = true;
+                inventoryMenu.style.display = 'block';
+                document.exitPointerLock();
+                updateInventoryUI();
+            }
+        }
+
+        if (!isInventoryOpen && document.pointerLockElement === canvas) {
+            const keyNum = parseInt(event.key);
+            if (keyNum >= 1 && keyNum <= 9) {
+                activeSlot = keyNum - 1;
+                updateInventoryUI();
+            }
+        }
     })
 
     // === HOTBAR & INVENTORY ===
-    const inventory = [
-        BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE,
-        BLOCKS.OAK_LOG, BLOCKS.OAK_LEAVES, BLOCKS.GLOWSTONE,
-        BLOCKS.AIR, BLOCKS.AIR, BLOCKS.AIR
-    ]
+    const INVENTORY_SIZE = 36;
+    const inventory = new Array(INVENTORY_SIZE).fill(BLOCKS.AIR);
+
+    inventory[0] = BLOCKS.GRASS;
+    inventory[1] = BLOCKS.DIRT;
+    inventory[2] = BLOCKS.STONE;
+    inventory[3] = BLOCKS.OAK_LOG;
+    inventory[4] = BLOCKS.OAK_LEAVES;
+    inventory[5] = BLOCKS.GLOWSTONE;
 
     let activeSlot = 0;
+
+    // --- UI ELEMENTS ---
     const slotsUI = document.querySelectorAll('.slot');
+    const inventoryMenu = document.getElementById('inventory-menu');
+    const inventoryGrid = document.getElementById('inventory-grid');
+    const cursorItemUI = document.getElementById('cursor-item');
+
+    let mouseHeldItem = BLOCKS.AIR;
+    let isInventoryOpen = false;
+
+    document.addEventListener('mousemove', (event) => {
+        if (mouseHeldItem !== BLOCKS.AIR) {
+            cursorItemUI.style.left = `${event.clientX - 16}px`;
+            cursorItemUI.style.top = `${event.clientY - 16}px`;
+        }
+    });
+
+    function updateInventoryUI() {
+        for (let i = 0; i < 9; i++) {
+            slotsUI[i].classList.remove('active');
+            slotsUI[i].innerHTML = '';
+
+            const blockId = inventory[i];
+            if (blockId !== BLOCKS.AIR) {
+                const img = document.createElement('img');
+                img.src = BLOCK_ICONS[blockId];
+                slotsUI[i].appendChild(img);
+            }
+        }
+
+        slotsUI[activeSlot].classList.add('active');
+
+        if (isInventoryOpen) {
+            inventoryGrid.innerHTML = '';
+
+            for (let i = 0; i < INVENTORY_SIZE; i++) {
+                const slot = document.createElement('div');
+                slot.classList.add('inventory-slot');
+                inventoryGrid.appendChild(slot);
+
+                if (i === 9) slot.style.marginTop = '0.5em';
+
+                const blockId = inventory[i];
+                if (blockId !== BLOCKS.AIR) {
+                    const img = document.createElement('img');
+                    img.src = BLOCK_ICONS[blockId];
+                    slot.appendChild(img);
+                }
+
+                slot.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+
+                    if (mouseHeldItem === BLOCKS.AIR && inventory[i] !== BLOCKS.AIR) {
+                        // PICK UP ITEM
+                        mouseHeldItem = inventory[i];
+                        inventory[i] = BLOCKS.AIR;
+                    } else if (mouseHeldItem !== BLOCKS.AIR && inventory[i] === BLOCKS.AIR) {
+                        // PLACE ITEM
+                        inventory[i] = mouseHeldItem;
+                        mouseHeldItem = BLOCKS.AIR;
+                    } else if (mouseHeldItem !== BLOCKS.AIR && inventory[i] !== BLOCKS.AIR) {
+                        // SWAP ITEMS
+                        const temp = inventory[i];
+                        inventory[i] = mouseHeldItem;
+                        mouseHeldItem = temp;
+                    }
+
+                    if (mouseHeldItem !== BLOCKS.AIR) {
+                        cursorItemUI.src = BLOCK_ICONS[mouseHeldItem];
+                        cursorItemUI.style.display = 'block';
+                    } else {
+                        cursorItemUI.style.display = 'none';
+                    }
+
+                    updateInventoryUI();
+                })
+
+                inventoryGrid.appendChild(slot);
+            }
+        }
+    }
+
+    updateInventoryUI();
 
     function updateHotbarUI() {
         slotsUI.forEach((slot, index) => slot.classList.remove('active'));
@@ -195,31 +315,20 @@ async function initGame() {
     }
 
     window.addEventListener('wheel', (event) => {
-        if (document.pointerLockElement !== canvas) return;
+        if (isInventoryOpen || document.pointerLockElement !== canvas) return;
 
         if (event.deltaY > 0) {
-            activeSlot = (activeSlot + 1) % inventory.length;
+            activeSlot = (activeSlot + 1) % 9;
         } else {
-            activeSlot = (activeSlot - 1 + inventory.length) % inventory.length;
+            activeSlot = (activeSlot - 1 + 9) % 9;
         }
 
         updateHotbarUI();
     })
 
-    document.addEventListener('keydown', (event) => {
-        if (document.pointerLockElement !== canvas) return;
-        const keyNum = parseInt(event.key);
-
-        if (keyNum >= 1 && keyNum <= 9) {
-            activeSlot = keyNum - 1;
-            updateHotbarUI();
-        }
-
-    })
-
     // === MOUSE INTERACTION & RAYCASTING ===
     canvas.addEventListener('mousedown', (event) => {
-        if (document.pointerLockElement !== canvas) return;
+        if (isInventoryOpen || document.pointerLockElement !== canvas) return;
 
         if (event.button === 0 || event.button === 2) {
             const rayDirection = camera.getRay(
@@ -248,8 +357,6 @@ async function initGame() {
 
                     if (camera.isFlying || !camera.isBlockInsidePlayer(placeX, placeY, placeZ)) {
                         chunkManager.setBlock(placeX, placeY, placeZ, selectedBlock);
-
-                        const blockData = assets.blocks[Object.keys(BLOCKS).find(key => BLOCKS[key] === selectedBlock).toLowerCase()];
                     } else {
                         return; // Prevent placing block inside player when not flying
                     }

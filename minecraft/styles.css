@@ -196,6 +196,56 @@ input[type="range"]::-webkit-slider-thumb {
     z-index: 10;
 }
 
+/* === INVENTORY MENU === */
+#inventory-menu {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: sans-serif;
+    z-index: 10;
+}
+
+#inventory-grid{
+    display: grid;
+    grid-template-columns: repeat(9, 2em);
+    grid-gap: 0.25em;
+}
+
+#inventory-grid .inventory-slot{
+    width: 2em;
+    height: 2em;
+    border: 2px solid #777;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+#inventory-grid .inventory-slot img{
+    max-width: 32px;
+    max-height: 32px;
+    object-fit: contain;
+}
+
+#cursor-item{
+    display: none;
+    position: absolute;
+    width: 2em;
+    height: 2em;
+    pointer-events: none;
+    z-index: 999;
+}
+
+/* === HOTBAR === */
+
 #hotbar {
     position: absolute;
     bottom: 20px;
@@ -226,4 +276,10 @@ input[type="range"]::-webkit-slider-thumb {
 .slot.active {
     border-color: white;
     box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.slot img {
+    max-width: 32px;
+    max-height: 32px;
+    object-fit: contain;
 }
