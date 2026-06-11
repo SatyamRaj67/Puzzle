@@ -43,7 +43,7 @@ jobs:
 
       # === NEW STEP: Run the compiler to create the 'dist' bundle ===
       - name: Build with Vite
-        run: npx vite build
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
