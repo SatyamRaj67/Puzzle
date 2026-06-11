@@ -1,6 +1,6 @@
 {
     "blocks": {
-        "grass": {
+        "grass_block": {
             "Top": "textures/model/grass_block_top.png",
             "Bottom": "textures/model/dirt.png",
             "Side": "textures/model/grass_block_side.png",
@@ -22,13 +22,63 @@
         },
         "oak_leaves": {
             "All": "textures/model/oak_leaves.png",
+            "icon": "textures/icon/oak_leaves.png",
             "transparent": true,
-            "icon": "textures/icon/oak_leaves.png"
+            "lightAttenuation" : 3
         },
         "glowstone": {
             "All": "textures/model/glowstone.png",
-            "light": 15,
-            "icon": "textures/icon/glowstone.png"
+            "icon": "textures/icon/glowstone.png",
+            "light": 15
+        },
+        "snow" : {
+            "All" : "textures/model/snow.png",
+            "icon": "textures/icon/snow_block.png"
+        },
+        "water" : {
+            "All" : [
+                "textures/model/water_still/water_still_00.png",
+                "textures/model/water_still/water_still_01.png",
+                "textures/model/water_still/water_still_02.png",
+                "textures/model/water_still/water_still_03.png",
+                "textures/model/water_still/water_still_04.png",
+                "textures/model/water_still/water_still_05.png",
+                "textures/model/water_still/water_still_06.png",
+                "textures/model/water_still/water_still_07.png",
+                "textures/model/water_still/water_still_08.png",
+                "textures/model/water_still/water_still_09.png",
+                "textures/model/water_still/water_still_10.png",
+                "textures/model/water_still/water_still_11.png",
+                "textures/model/water_still/water_still_12.png",
+                "textures/model/water_still/water_still_13.png",
+                "textures/model/water_still/water_still_14.png",
+                "textures/model/water_still/water_still_15.png",
+                "textures/model/water_still/water_still_16.png",
+                "textures/model/water_still/water_still_17.png",
+                "textures/model/water_still/water_still_18.png",
+                "textures/model/water_still/water_still_19.png",
+                "textures/model/water_still/water_still_20.png",
+                "textures/model/water_still/water_still_21.png",
+                "textures/model/water_still/water_still_22.png",
+                "textures/model/water_still/water_still_23.png",
+                "textures/model/water_still/water_still_24.png",
+                "textures/model/water_still/water_still_25.png",
+                "textures/model/water_still/water_still_26.png",
+                "textures/model/water_still/water_still_27.png",
+                "textures/model/water_still/water_still_28.png",
+                "textures/model/water_still/water_still_29.png",
+                "textures/model/water_still/water_still_30.png",
+                "textures/model/water_still/water_still_31.png"
+            ],
+            "icon": "textures/icon/water_bucket.png",
+            "transparent": true,
+            "isFluid": true
+        },
+        "grass" : {
+            "All" : "textures/model/grass.png",
+            "icon" : "textures/icon/tall_grass.png",
+            "transparent" : true,
+            "isPlant" : true
         }
     },
     "system": {
