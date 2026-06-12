@@ -62,6 +62,7 @@ export interface IRenderer {
     playerPos: [number, number, number],
     holdingTorch: number,
     timeVal: number,
+    isSubmerged: boolean,
   ): void;
 
   createTextureArrayFromImage(

@@ -47,7 +47,11 @@ export class Raycaster {
       const blockId = chunkManager.getBlock(x, y, z);
 
       if (blockId !== 0) {
-        return { x, y, z, blockId, normal: hitNormal };
+        const blockData = chunkManager.blockRegistry[blockId.toString()];
+
+        if (blockData && !blockData.isFluid){
+          return { x, y, z, blockId, normal: hitNormal };
+        }
       }
 
       // Step B: Move to the next voxel boundary

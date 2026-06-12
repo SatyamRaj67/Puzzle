@@ -16,6 +16,7 @@ export class FirstPersonCamera {
 
   public baseSpeed: number;
   public sprintSpeed: number;
+  public baseWaterSpeed: number;
   public speed: number;
 
   public lastWPress: number;
@@ -27,6 +28,8 @@ export class FirstPersonCamera {
   public onGround: boolean;
 
   public isFlying: boolean;
+  public inFluid: boolean = false;
+  public isSubmerged: boolean = false;
 
   public lastSpacePress: number;
   public keys: Record<string, boolean>;
@@ -46,6 +49,7 @@ export class FirstPersonCamera {
 
     this.baseSpeed = 0.15;
     this.sprintSpeed = 0.45; // Movement speed
+    this.baseWaterSpeed = 0.075; // Speed when in water
     this.speed = this.baseSpeed;
 
     this.lastWPress = 0;
@@ -122,10 +126,33 @@ export class FirstPersonCamera {
   }
 
   public update(chunkManager: ChunkManager): void {
-    if (!this.isFlying && (this.keys.ShiftLeft || this.isSprinting)) {
-      this.speed = this.sprintSpeed;
+    const eyePos = this.getCameraPosition();
+    const eyeBlock = chunkManager.getBlock(
+      Math.floor(eyePos[0]),
+      Math.floor(eyePos[1]),
+      Math.floor(eyePos[2]),
+    );
+    const feetBlock = chunkManager.getBlock(
+      Math.floor(this.position[0]),
+      Math.floor(this.position[1]),
+      Math.floor(this.position[2]),
+    );
+
+    const eyeData = chunkManager.blockRegistry[eyeBlock];
+    const feetData = chunkManager.blockRegistry[feetBlock];
+
+    this.isSubmerged = !!(eyeData && eyeData.isFluid);
+    this.inFluid = !!((feetData && feetData.isFluid) || this.isSubmerged);
+
+    if (this.isFlying) {
+      this.speed = this.baseSpeed * (this.isSprinting ? 2 : 1); 
+      this.velocity[1] = 0;
+    } else if (this.inFluid) {
+      this.speed = this.baseWaterSpeed * (this.isSprinting ? 2 : 1);
+    } else if (this.keys.ShiftLeft || this.isSprinting) {
+      this.speed = this.sprintSpeed; 
     } else {
-      this.speed = this.baseSpeed;
+      this.speed = this.baseSpeed; 
     }
 
     const forwardX = Math.sin(this.yaw);
@@ -176,11 +203,23 @@ export class FirstPersonCamera {
         this.position[2] -= dz;
       }
 
-      this.velocity[1] += this.gravity;
-
-      if (this.keys.Space && this.onGround) {
-        this.velocity[1] = this.jumpStrength;
-        this.onGround = false;
+      if (this.inFluid) {
+        if (this.keys.Space) {
+          this.velocity[1] += 0.005;
+          this.velocity[1] = Math.min(this.velocity[1], 0.08);
+        } else if (this.keys.ShiftLeft) {
+          this.velocity[1] -= 0.005;
+          this.velocity[1] = Math.max(this.velocity[1], -0.08);
+        } else {
+          this.velocity[1] -= 0.002;
+          this.velocity[1] = Math.max(this.velocity[1], -0.03);
+        }
+      } else {
+        this.velocity[1] += this.gravity;
+        if (this.keys.Space && this.onGround) {
+          this.velocity[1] = this.jumpStrength;
+          this.onGround = false;
+        }
       }
 
       this.position[1] += this.velocity[1];

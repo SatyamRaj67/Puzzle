@@ -422,9 +422,19 @@ async function initGame() {
           if (hitEntity) return;
 
           // LEFT CLICK: PLACE BLOCK
-          const placeX = hit.x + hit.normal[0];
-          const placeY = hit.y + hit.normal[1];
-          const placeZ = hit.z + hit.normal[2];
+          const targetBlockData =
+            chunkManager.blockRegistry[hit.blockId.toString()];
+
+          let placeX, placeY, placeZ;
+          if (targetBlockData && targetBlockData.isPlant) {
+            placeX = hit.x;
+            placeY = hit.y;
+            placeZ = hit.z;
+          } else {
+            placeX = hit.x + hit.normal[0];
+            placeY = hit.y + hit.normal[1];
+            placeZ = hit.z + hit.normal[2];
+          }
 
           const selectedBlock = inventory[activeSlot];
           if (selectedBlock === BLOCKS.AIR) return; // Can't place air
@@ -550,7 +560,10 @@ async function initGame() {
       isHoldingTorch = heldBlockData.light / 15.0;
     }
 
-    renderer.beginFrame(projection, view, [0.53, 0.81, 0.92]);
+    let skyColor: [number, number, number] = [0.53, 0.81, 0.92];
+
+    renderer.beginFrame(projection, view, skyColor);
+
     renderer.drawSkybox(projection, view, sunDirection);
 
     renderer.drawWorld(
@@ -562,6 +575,7 @@ async function initGame() {
       camera.getCameraPosition(),
       isHoldingTorch,
       now * 0.001,
+      camera.isSubmerged,
     );
 
     for (let i = chunkManager.entities.length - 1; i >= 0; i--) {

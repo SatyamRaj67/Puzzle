@@ -768,6 +768,7 @@ export class WebGLRenderer implements IRenderer {
     playerPos: number[],
     holdingTorch: number,
     timeVal: number,
+    isSubmerged: boolean,
   ): void {
     this.gl.disable(this.gl.BLEND);
 

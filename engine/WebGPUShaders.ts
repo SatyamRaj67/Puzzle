@@ -7,6 +7,10 @@ struct GlobalUniforms {
     time: f32,
     playerPos: vec3<f32>,
     holdingTorch: f32,
+    isSubmerged: f32,
+    pad1: f32,
+    pad2: f32,
+    pad3: f32,
 };
 
 @group(0) @binding(0) var<uniform> globals: GlobalUniforms;
@@ -96,9 +100,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let warmLightTint = vec3<f32>(1.0, 0.9, 0.8);
     let finalTint = mix(envTint, warmLightTint, artificialLight);
 
-    let finalColor = texColor.rgb * totalIllumination * finalTint * in.ao;
+   let finalColor = texColor.rgb * totalIllumination * finalTint * in.ao;
+    var outputColor = finalColor;
 
-    return vec4<f32>(finalColor, texColor.a);
+    if (globals.isSubmerged > 0.4) {
+        let baseWaterTint = vec3<f32>(0.4, 0.7, 1.0);
+        outputColor = outputColor * baseWaterTint;
+
+        let dist = distance(in.worldPos, globals.playerPos);
+        let fogDensity = 0.015;
+        let fogFactor = clamp(exp(-dist * fogDensity), 0.0, 1.0);
+        let waterFogColor = vec3<f32>(0.0, 0.15, 0.4); 
+
+        outputColor = mix(waterFogColor, outputColor, fogFactor);
+    }
+
+    return vec4<f32>(outputColor, texColor.a);
 }
 `;
 
@@ -349,4 +366,4 @@ fn vs_main(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
 fn fs_main() -> @location(0) vec4<f32> {
     return vec4<f32>(line.color, 1.0);
 }
-`
+`;

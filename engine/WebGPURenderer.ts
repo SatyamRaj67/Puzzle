@@ -13,6 +13,7 @@ export interface WebGPUMesh extends IMeshHandle {
   indexCount: number;
   modelBuffer: GPUBuffer;
   modelBindGroup: GPUBindGroup;
+  transModelBindGroup: GPUBindGroup;
 }
 
 export class WebGPURenderer implements IRenderer {
@@ -25,6 +26,8 @@ export class WebGPURenderer implements IRenderer {
   public uniformBuffer!: GPUBuffer;
   public uniformBindGroup!: GPUBindGroup;
   public uniformData!: Float32Array;
+
+  public transPipeline!: GPURenderPipeline;
 
   public skyPipeline!: GPURenderPipeline;
   public skyBindGroup!: GPUBindGroup;
@@ -45,6 +48,7 @@ export class WebGPURenderer implements IRenderer {
   public lineBindGroup!: GPUBindGroup;
 
   public entityGlobalBindGroup!: GPUBindGroup;
+  public transGlobalBindGroup!: GPUBindGroup;
   public highlightGlobalBindGroup!: GPUBindGroup;
   public lineGlobalBindGroup!: GPUBindGroup;
 
@@ -126,16 +130,6 @@ export class WebGPURenderer implements IRenderer {
         targets: [
           {
             format: this.format,
-            blend: {
-              color: {
-                srcFactor: "src-alpha",
-                dstFactor: "one-minus-src-alpha",
-              },
-              alpha: {
-                srcFactor: "one",
-                dstFactor: "one-minus-src-alpha",
-              },
-            },
           },
         ],
       },
@@ -145,6 +139,41 @@ export class WebGPURenderer implements IRenderer {
       },
       depthStencil: {
         depthWriteEnabled: true,
+        depthCompare: "less",
+        format: "depth24plus",
+      },
+    });
+
+    this.transPipeline = this.device.createRenderPipeline({
+      label: "Translucent Pipeline",
+      layout: "auto",
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [vertexBufferLayout],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [
+          {
+            format: this.format,
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+              },
+              alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" },
+            },
+          },
+        ],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "none",
+      },
+      depthStencil: {
+        depthWriteEnabled: false,
         depthCompare: "less",
         format: "depth24plus",
       },
@@ -333,6 +362,18 @@ export class WebGPURenderer implements IRenderer {
       ],
     });
 
+    const transModelBindGroup = this.device.createBindGroup({
+      layout: this.transPipeline.getBindGroupLayout(1),
+      entries: [
+        {
+          binding: 0,
+          resource: {
+            buffer: modelBuffer,
+          },
+        },
+      ],
+    });
+
     return {
       id: this.nextMeshId++,
       vertexBuffer,
@@ -340,6 +381,7 @@ export class WebGPURenderer implements IRenderer {
       indexCount: indexData.length,
       modelBuffer,
       modelBindGroup,
+      transModelBindGroup,
     } as WebGPUMesh;
   }
 
@@ -444,11 +486,12 @@ export class WebGPURenderer implements IRenderer {
     playerPos: [number, number, number],
     holdingTorch: number,
     timeVal: number,
+    isSubmerged: boolean,
   ): void {
     if (!this.pipeline || !this.uniformBindGroup || !this.passEncoder) return;
 
-    if (this.uniformData.length !== 40) {
-      this.uniformData = new Float32Array(40);
+    if (this.uniformData.length !== 44) {
+      this.uniformData = new Float32Array(44);
     }
 
     this.uniformData.set(projMatrix, 0); //  Floats 0-15
@@ -457,28 +500,41 @@ export class WebGPURenderer implements IRenderer {
     this.uniformData[35] = timeVal; // Float 35
     this.uniformData.set(playerPos, 36); // Floats 36-38
     this.uniformData[39] = holdingTorch; // Float 39
+    this.uniformData[40] = isSubmerged ? 1.0 : 0.0; // Float 40
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
     this.passEncoder.setPipeline(this.pipeline);
     this.passEncoder.setBindGroup(0, this.uniformBindGroup);
 
-    const drawChunks = (chunks: RenderPassItem[]) => {
+    const drawChunks = (
+      chunks: RenderPassItem[],
+      pipeline: GPURenderPipeline,
+      globalKey: GPUBindGroup,
+      isTranslucent: boolean,
+    ) => {
+      this.passEncoder.setPipeline(pipeline);
+      this.passEncoder.setBindGroup(0, globalKey);
+
       for (const chunk of chunks) {
         const gpuMesh = chunk.mesh as WebGPUMesh;
         if (!gpuMesh || !gpuMesh.vertexBuffer) continue;
 
         this.device.queue.writeBuffer(gpuMesh.modelBuffer, 0, chunk.model);
 
-        this.passEncoder.setBindGroup(1, gpuMesh.modelBindGroup);
+        const localKey = isTranslucent
+          ? gpuMesh.transModelBindGroup
+          : gpuMesh.modelBindGroup;
+
+        this.passEncoder.setBindGroup(1, localKey);
         this.passEncoder.setVertexBuffer(0, gpuMesh.vertexBuffer);
         this.passEncoder.setIndexBuffer(gpuMesh.indexBuffer, "uint32");
         this.passEncoder.drawIndexed(gpuMesh.indexCount);
       }
     };
 
-    drawChunks(solidPass);
-    drawChunks(transPass);
+    drawChunks(solidPass, this.pipeline, this.uniformBindGroup, false);
+    drawChunks(transPass, this.transPipeline, this.transGlobalBindGroup, true);
   }
 
   public createTextureArrayFromImage(
@@ -529,6 +585,19 @@ export class WebGPURenderer implements IRenderer {
     this.lineBindGroup = this.device.createBindGroup({
       layout: this.linePipeline.getBindGroupLayout(1),
       entries: [{ binding: 0, resource: { buffer: this.lineUniforms } }],
+    });
+
+    // === Forge Global Key for Translucent Water ===
+    this.transGlobalBindGroup = this.device.createBindGroup({
+      layout: this.transPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.uniformBuffer } },
+        {
+          binding: 1,
+          resource: this.textureArray.createView({ dimension: "2d-array" }),
+        },
+        { binding: 2, resource: this.sampler },
+      ],
     });
 
     // === Forge Global Key for Entities ===
