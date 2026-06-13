@@ -1,5 +1,6 @@
 import { Mat4 } from "./Math";
 import { ChunkManager } from "./ChunkManager";
+import type { InputManager } from "./InputManager";
 
 export class FirstPersonCamera {
   public position: [number, number, number];
@@ -32,9 +33,8 @@ export class FirstPersonCamera {
   public isSubmerged: boolean = false;
 
   public lastSpacePress: number;
-  public keys: Record<string, boolean>;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor() {
     this.position = [16, 100, 16];
     this.velocity = [0, 0, 0];
 
@@ -47,85 +47,36 @@ export class FirstPersonCamera {
 
     this.viewMatrix = Mat4.create();
 
-    this.baseSpeed = 0.15;
-    this.sprintSpeed = 0.45; // Movement speed
-    this.baseWaterSpeed = 0.075; // Speed when in water
+    this.baseSpeed = 0.22;
+    this.sprintSpeed = 0.32; // Movement speed
+    this.baseWaterSpeed = 0.12; // Speed when in water
     this.speed = this.baseSpeed;
 
     this.lastWPress = 0;
     this.isSprinting = false;
 
-    this.gravity = -0.012; // Gravity acceleration
+    this.gravity = -0.014; // Gravity acceleration
     this.jumpStrength = 0.2;
 
     this.onGround = false;
 
     this.isFlying = false; // Set to true to disable gravity and collision for testing
     this.lastSpacePress = 0;
-
-    this.keys = {
-      KeyW: false,
-      KeyA: false,
-      KeyS: false,
-      KeyD: false,
-      Space: false,
-      ShiftLeft: false,
-    };
-
-    canvas.addEventListener("click", () => canvas.requestPointerLock());
-
-    document.addEventListener("mousemove", (e) => {
-      if (document.pointerLockElement === canvas) {
-        this.yaw -= e.movementX * 0.002;
-        this.pitch += e.movementY * 0.002;
-
-        this.pitch = Math.max(
-          -Math.PI / 2 + 0.01,
-          Math.min(Math.PI / 2 - 0.01, this.pitch),
-        );
-      }
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (document.pointerLockElement !== canvas) return;
-
-      if (this.keys.hasOwnProperty(e.code)) {
-        this.keys[e.code] = true;
-
-        if (e.code === "KeyW" && !e.repeat) {
-          const now = performance.now();
-          if (now - this.lastWPress < 300) {
-            this.isSprinting = true;
-          }
-          this.lastWPress = now;
-        }
-
-        if (e.code === "Space" && !e.repeat) {
-          const now = performance.now();
-          if (now - this.lastSpacePress < 300) {
-            this.isFlying = !this.isFlying;
-            this.velocity[1] = 0;
-          }
-          this.lastSpacePress = now;
-        }
-      }
-    });
-
-    document.addEventListener("keyup", (e) => {
-      if (this.keys.hasOwnProperty(e.code)) {
-        this.keys[e.code] = false;
-
-        if (e.code === "KeyW") this.isSprinting = false;
-      }
-    });
   }
 
-  public resetInputs() {
-    for (let key in this.keys) this.keys[key] = false;
-    this.isSprinting = false;
-  }
+  public update(
+    chunkManager: ChunkManager,
+    timeScale: number,
+    input: InputManager,
+  ): void {
+    this.yaw -= input.movementX * 0.002;
+    this.pitch += input.movementY * 0.002;
 
-  public update(chunkManager: ChunkManager): void {
+    this.pitch = Math.max(
+      -Math.PI / 2 + 0.01,
+      Math.min(Math.PI / 2 - 0.01, this.pitch),
+    );
+
     const eyePos = this.getCameraPosition();
     const eyeBlock = chunkManager.getBlock(
       Math.floor(eyePos[0]),
@@ -144,15 +95,16 @@ export class FirstPersonCamera {
     this.isSubmerged = !!(eyeData && eyeData.isFluid);
     this.inFluid = !!((feetData && feetData.isFluid) || this.isSubmerged);
 
-    if (this.isFlying) {
-      this.speed = this.baseSpeed * (this.isSprinting ? 2 : 1); 
+    if (input.flyToggled) {
+      this.isFlying = !this.isFlying;
+      this.speed = this.baseSpeed * (this.isSprinting ? 2 : 1);
       this.velocity[1] = 0;
     } else if (this.inFluid) {
       this.speed = this.baseWaterSpeed * (this.isSprinting ? 2 : 1);
-    } else if (this.keys.ShiftLeft || this.isSprinting) {
-      this.speed = this.sprintSpeed; 
+    } else if (input.keys["ShiftLeft"] || this.isSprinting) {
+      this.speed = this.sprintSpeed;
     } else {
-      this.speed = this.baseSpeed; 
+      this.speed = this.baseSpeed;
     }
 
     const forwardX = Math.sin(this.yaw);
@@ -164,24 +116,26 @@ export class FirstPersonCamera {
     let dx = 0;
     let dz = 0;
 
-    if (this.keys.KeyW) {
-      dx -= forwardX * this.speed;
-      dz -= forwardZ * this.speed;
+    const currentSpeed = this.speed * timeScale;
+
+    if (input.keys["KeyW"]) {
+      dx -= forwardX * currentSpeed;
+      dz -= forwardZ * currentSpeed;
     }
 
-    if (this.keys.KeyS) {
-      dx += forwardX * this.speed;
-      dz += forwardZ * this.speed;
+    if (input.keys["KeyS"]) {
+      dx += forwardX * currentSpeed;
+      dz += forwardZ * currentSpeed;
     }
 
-    if (this.keys.KeyA) {
-      dx += rightX * this.speed;
-      dz += rightZ * this.speed;
+    if (input.keys["KeyA"]) {
+      dx += rightX * currentSpeed;
+      dz += rightZ * currentSpeed;
     }
 
-    if (this.keys.KeyD) {
-      dx -= rightX * this.speed;
-      dz -= rightZ * this.speed;
+    if (input.keys["KeyD"]) {
+      dx -= rightX * currentSpeed;
+      dz -= rightZ * currentSpeed;
     }
 
     if (this.isFlying) {
@@ -189,8 +143,8 @@ export class FirstPersonCamera {
       this.position[0] += dx;
       this.position[2] += dz;
 
-      if (this.keys.Space) this.position[1] += this.speed;
-      if (this.keys.ShiftLeft) this.position[1] -= this.speed;
+      if (input.keys["Space"]) this.position[1] += currentSpeed;
+      if (input.keys["ShiftLeft"]) this.position[1] -= currentSpeed;
     } else {
       // NORMAL MODE - AABB Collision and gravity
       this.position[0] += dx;
@@ -204,19 +158,19 @@ export class FirstPersonCamera {
       }
 
       if (this.inFluid) {
-        if (this.keys.Space) {
-          this.velocity[1] += 0.005;
-          this.velocity[1] = Math.min(this.velocity[1], 0.08);
-        } else if (this.keys.ShiftLeft) {
-          this.velocity[1] -= 0.005;
-          this.velocity[1] = Math.max(this.velocity[1], -0.08);
+        if (input.keys["Space"]) {
+          this.velocity[1] += 0.015;
+          this.velocity[1] = Math.min(this.velocity[1], 0.15);
+        } else if (input.keys["ShiftLeft"]) {
+          this.velocity[1] -= 0.015;
+          this.velocity[1] = Math.max(this.velocity[1], -0.15);
         } else {
-          this.velocity[1] -= 0.002;
-          this.velocity[1] = Math.max(this.velocity[1], -0.03);
+          this.velocity[1] -= 0.004;
+          this.velocity[1] = Math.max(this.velocity[1], -0.06);
         }
       } else {
         this.velocity[1] += this.gravity;
-        if (this.keys.Space && this.onGround) {
+        if (input.keys["Space"] && this.onGround) {
           this.velocity[1] = this.jumpStrength;
           this.onGround = false;
         }

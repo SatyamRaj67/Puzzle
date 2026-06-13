@@ -104,7 +104,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var outputColor = finalColor;
 
     if (globals.isSubmerged > 0.4) {
-        let baseWaterTint = vec3<f32>(0.4, 0.7, 1.0);
+        let baseWaterTint = vec3<f32>(0.2, 0.35, 0.5);
         outputColor = outputColor * baseWaterTint;
 
         let dist = distance(in.worldPos, globals.playerPos);

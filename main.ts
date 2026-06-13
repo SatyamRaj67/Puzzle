@@ -1,12 +1,14 @@
 import { ChunkManager } from "./engine/ChunkManager";
 import { compileRegistry } from "./engine/AssetsCompiler";
 import { Entity } from "./engine/Entity";
-import { FirstPersonCamera } from "./engine/FPCamera";
 import { Mat4 } from "./engine/Math";
-import { Raycaster } from "./engine/Raycaster";
 import { WebGLRenderer } from "./engine/WebGLRenderer";
 import { WebGPURenderer } from "./engine/WebGPURenderer";
 import type { BlockIdMap, IRenderer } from "./engine/types";
+import { TimeManager } from "./engine/TimeManager";
+import { InputManager } from "./engine/InputManager";
+import { UIManager } from "./engine/UIManager";
+import { Player } from "./engine/Player";
 
 // === CANVAS ===
 const canvas = document.getElementById("gameCanvas")! as HTMLCanvasElement;
@@ -28,6 +30,10 @@ async function loadImages(urls: string[]): Promise<HTMLImageElement[]> {
 }
 
 async function initGame() {
+  const timeManager = new TimeManager();
+  const inputManager = new InputManager(canvas);
+  const uiManager = new UIManager(canvas, inputManager, timeManager);
+
   // === RENDERER ===
   let renderer: IRenderer;
   const gpuRenderer = new WebGPURenderer(canvas);
@@ -41,8 +47,6 @@ async function initGame() {
     renderer = new WebGLRenderer(canvas);
   }
   // === CAMERA ===
-  const camera = new FirstPersonCamera(canvas);
-
   const projection = Mat4.create();
 
   Mat4.perspective(
@@ -99,13 +103,19 @@ async function initGame() {
     rawAssets.system.highlightLayer,
   );
 
-  // === CHUNK MANAGER SETUP ===
   const chunkManager = new ChunkManager(renderer, BLOCK_DATA);
   chunkManager.BLOCKS = BLOCKS;
   chunkManager.worker.postMessage({
     type: "init",
     blocks: BLOCKS,
     blockRegistry: BLOCK_DATA,
+  });
+  const player = new Player(canvas, inputManager, BLOCKS, BLOCK_ICONS);
+
+  canvas.addEventListener("click", () => {
+    if (!uiManager.isGamePaused && !player.inventoryManager.isOpen) {
+      canvas.requestPointerLock();
+    }
   });
 
   // === ENTITY ===
@@ -115,432 +125,41 @@ async function initGame() {
     cowModelData.indices,
   );
 
-  // === UI & MENU ===
-  // --- Pause Menu
-
-  const pauseMenu = document.getElementById("pause-menu")!;
-  document.addEventListener("pointerlockchange", () => {
-    if (document.pointerLockElement === canvas) {
-      pauseMenu.style.display = "none";
-      lastFrameTime = performance.now();
-      isGamePaused = false;
-    } else {
-      if (isInventoryOpen) return;
-      pauseMenu.style.display = "flex";
-      isGamePaused = true;
-      camera.resetInputs();
-    }
-  });
-
-  document.getElementById("btn-resume")!.addEventListener("click", () => {
-    canvas.requestPointerLock();
-  });
-
-  // --- Options Menu
-  pauseMenu.querySelector("#btn-options")!.addEventListener("click", () => {
-    document.getElementById("options-menu")!.style.display = "flex";
-    pauseMenu.style.display = "none";
-  });
-
-  const rdSlider = document.getElementById("rd-slider")!;
-  const rdVal = document.getElementById("rd-val")!;
-
-  rdSlider.addEventListener("input", (e) => {
-    const target = e.target as HTMLInputElement;
-    const value = parseInt(target.value);
-    chunkManager.renderDistance = value;
-    rdVal.innerText = value.toString();
-  });
-
-  const fovSlider = document.getElementById("fov-slider")!;
-  const fovVal = document.getElementById("fov-val")!;
-  fovSlider.addEventListener("input", (e) => {
-    const target = e.target as HTMLInputElement;
-    const value = parseInt(target.value);
-    currentFOV = (value * Math.PI) / 180;
-    Mat4.perspective(
-      projection,
-      currentFOV,
-      canvas.width / canvas.height,
-      0.1,
-      1000.0,
-    );
-    fovVal.innerText = `${value}°`;
-  });
-
-  document
-    .getElementById("go-pause-menu-from-options")!
-    .addEventListener("click", () => {
-      document.getElementById("options-menu")!.style.display = "none";
-      pauseMenu.style.display = "flex";
-    });
-
-  document.getElementById("btn-devtools")!.addEventListener("click", () => {
-    document.getElementById("devtools-menu")!.style.display = "flex";
-    pauseMenu.style.display = "none";
-  });
-
-  document
-    .getElementById("go-pause-menu-from-devtools")!
-    .addEventListener("click", () => {
-      document.getElementById("devtools-menu")!.style.display = "none";
-      pauseMenu.style.display = "flex";
-    });
-
-  const speedSlider = document.getElementById("speed-slider")!;
-  const speedVal = document.getElementById("speed-val")!;
-  speedSlider.addEventListener("input", (e) => {
-    const target = e.target as HTMLInputElement;
-    const value = parseInt(target.value);
-    timeSpeed = value * 0.00001;
-    speedVal.innerText = `${(value / 10).toFixed(1)}x`;
-  });
-
-  const btnToggleTime = document.getElementById("btn-toggle-time")!;
-  btnToggleTime.addEventListener("click", () => {
-    isTimePaused = !isTimePaused;
-    btnToggleTime.innerText = isTimePaused ? "Resume Time" : "Pause Time";
-    btnToggleTime.style.background = isTimePaused ? "#e67e22" : "#444";
-  });
-
-  document.getElementById("btn-set-noon")!.addEventListener("click", () => {
-    gameTime = 0;
-  });
-
-  document.getElementById("btn-quit")!.addEventListener("click", () => {
-    window.close();
-  });
-
-  // === DEBUG HUD ===
-  const debugHUD = document.getElementById("debug-hud")!;
-  let showDebugInfo = false;
-  let showEntityRay = false;
-
-  window.addEventListener("keydown", (event) => {
-    if (event.key === "F3") {
-      event.preventDefault();
-      showDebugInfo = !showDebugInfo;
-      debugHUD.style.display = showDebugInfo ? "block" : "none";
-    }
-
-    if (event.key.toLowerCase() === "p") {
-      event.preventDefault();
-      showEntityRay = !showEntityRay;
-    }
-
-    if (event.key.toLowerCase() === "e") {
-      pauseMenu.style.display = "none";
-      if (isInventoryOpen) {
-        isInventoryOpen = false;
-        inventoryMenu.style.display = "none";
-
-        if (mouseHeldItem !== BLOCKS.AIR) {
-          const emptySlot = inventory.indexOf(BLOCKS.AIR);
-          if (emptySlot !== -1) {
-            inventory[emptySlot] = mouseHeldItem;
-          }
-          mouseHeldItem = BLOCKS.AIR;
-          cursorItemUI.style.display = "none";
-        }
-        canvas.requestPointerLock();
-        updateInventoryUI();
-      } else {
-        isInventoryOpen = true;
-        inventoryMenu.style.display = "flex";
-        document.exitPointerLock();
-        updateInventoryUI();
-      }
-    }
-
-    if (!isInventoryOpen && document.pointerLockElement === canvas) {
-      const keyNum = parseInt(event.key);
-      if (keyNum >= 1 && keyNum <= 9) {
-        activeSlot = keyNum - 1;
-        updateInventoryUI();
-      }
-    }
-  });
-
-  // === HOTBAR & INVENTORY ===
-  const INVENTORY_SIZE = 36;
-  const inventory = new Array(INVENTORY_SIZE).fill(BLOCKS.AIR);
-
-  inventory[0] = BLOCKS.GRASS_BLOCK;
-  inventory[1] = BLOCKS.DIRT;
-  inventory[2] = BLOCKS.STONE;
-  inventory[3] = BLOCKS.OAK_LOG;
-  inventory[4] = BLOCKS.OAK_LEAVES;
-  inventory[5] = BLOCKS.GLOWSTONE;
-
-  let activeSlot = 0;
-
-  // --- UI ELEMENTS ---
-  const slotsUI = document.querySelectorAll(".slot");
-  const inventoryMenu = document.getElementById("inventory-menu")!;
-  const inventoryGrid = document.getElementById("inventory-grid")!;
-  const cursorItemUI = document.getElementById(
-    "cursor-item",
-  )! as HTMLImageElement;
-
-  let mouseHeldItem = BLOCKS.AIR;
-  let isInventoryOpen = false;
-
-  document.addEventListener("mousemove", (event) => {
-    if (mouseHeldItem !== BLOCKS.AIR) {
-      cursorItemUI.style.left = `${event.clientX - 16}px`;
-      cursorItemUI.style.top = `${event.clientY - 16}px`;
-    }
-  });
-
-  function updateInventoryUI() {
-    for (let i = 0; i < 9; i++) {
-      slotsUI[i].classList.remove("active");
-      slotsUI[i].innerHTML = "";
-
-      const blockId = inventory[i];
-      if (blockId !== BLOCKS.AIR) {
-        const img = document.createElement("img");
-        img.src = BLOCK_ICONS[blockId];
-        slotsUI[i].appendChild(img);
-      }
-    }
-
-    slotsUI[activeSlot].classList.add("active");
-
-    if (isInventoryOpen) {
-      inventoryGrid.innerHTML = "";
-
-      for (let i = 0; i < INVENTORY_SIZE; i++) {
-        const slot = document.createElement("div");
-        slot.classList.add("inventory-slot");
-        inventoryGrid.appendChild(slot);
-
-        const blockId = inventory[i];
-        if (blockId !== BLOCKS.AIR) {
-          const img = document.createElement("img");
-          img.src = BLOCK_ICONS[blockId];
-          slot.appendChild(img);
-        }
-
-        slot.addEventListener("mousedown", (event) => {
-          event.preventDefault();
-
-          if (mouseHeldItem === BLOCKS.AIR && inventory[i] !== BLOCKS.AIR) {
-            // PICK UP ITEM
-            mouseHeldItem = inventory[i];
-            inventory[i] = BLOCKS.AIR;
-          } else if (
-            mouseHeldItem !== BLOCKS.AIR &&
-            inventory[i] === BLOCKS.AIR
-          ) {
-            // PLACE ITEM
-            inventory[i] = mouseHeldItem;
-            mouseHeldItem = BLOCKS.AIR;
-          } else if (
-            mouseHeldItem !== BLOCKS.AIR &&
-            inventory[i] !== BLOCKS.AIR
-          ) {
-            // SWAP ITEMS
-            const temp = inventory[i];
-            inventory[i] = mouseHeldItem;
-            mouseHeldItem = temp;
-          }
-
-          if (mouseHeldItem !== BLOCKS.AIR) {
-            cursorItemUI.src = BLOCK_ICONS[mouseHeldItem];
-            cursorItemUI.style.display = "block";
-          } else {
-            cursorItemUI.style.display = "none";
-          }
-
-          updateInventoryUI();
-        });
-
-        inventoryGrid.appendChild(slot);
-      }
-    }
-  }
-
-  updateInventoryUI();
-
-  function updateHotbarUI() {
-    slotsUI.forEach((slot) => slot.classList.remove("active"));
-    slotsUI[activeSlot].classList.add("active");
-  }
-
-  window.addEventListener("wheel", (event) => {
-    if (isInventoryOpen || document.pointerLockElement !== canvas) return;
-
-    if (event.deltaY > 0) {
-      activeSlot = (activeSlot + 1) % 9;
-    } else {
-      activeSlot = (activeSlot - 1 + 9) % 9;
-    }
-
-    updateHotbarUI();
-  });
-
-  // === MOUSE INTERACTION & RAYCASTING ===
-  canvas.addEventListener("mousedown", (event) => {
-    if (isInventoryOpen || document.pointerLockElement !== canvas) return;
-
-    if (event.button === 0 || event.button === 2) {
-      const rayDirection = camera.getRay();
-      const cameraOrigin = camera.getCameraPosition();
-
-      const hit = Raycaster.step(cameraOrigin, rayDirection, chunkManager, 8);
-
-      if (hit) {
-        if (event.button === 2) {
-          // RIGHT CLICK: BREAK BLOCK
-          chunkManager.setBlock(hit.x, hit.y, hit.z, 0);
-        } else if (event.button === 0) {
-          let hitEntity = false;
-
-          for (const cow of chunkManager.entities) {
-            const cowVec = [
-              cow.x - cameraOrigin[0],
-              cow.y + 0.8 - cameraOrigin[1],
-              cow.z - cameraOrigin[2],
-            ];
-            const distToCow = Math.hypot(cowVec[0], cowVec[1], cowVec[2]);
-
-            if (distToCow < 4.0) {
-              const dotProduct =
-                (cowVec[0] / distToCow) * rayDirection[0] +
-                (cowVec[1] / distToCow) * rayDirection[1] +
-                (cowVec[2] / distToCow) * rayDirection[2];
-              if (dotProduct > 0.95) {
-                // Adjust this threshold as needed
-                cow.takeDamage(4);
-                hitEntity = true;
-                break;
-              }
-            }
-          }
-
-          if (hitEntity) return;
-
-          // LEFT CLICK: PLACE BLOCK
-          const targetBlockData =
-            chunkManager.blockRegistry[hit.blockId.toString()];
-
-          let placeX, placeY, placeZ;
-          if (targetBlockData && targetBlockData.isPlant) {
-            placeX = hit.x;
-            placeY = hit.y;
-            placeZ = hit.z;
-          } else {
-            placeX = hit.x + hit.normal[0];
-            placeY = hit.y + hit.normal[1];
-            placeZ = hit.z + hit.normal[2];
-          }
-
-          const selectedBlock = inventory[activeSlot];
-          if (selectedBlock === BLOCKS.AIR) return; // Can't place air
-
-          if (
-            camera.isFlying ||
-            !camera.isBlockInsidePlayer(placeX, placeY, placeZ)
-          ) {
-            chunkManager.setBlock(placeX, placeY, placeZ, selectedBlock);
-          } else {
-            return; // Prevent placing block inside player when not flying
-          }
-        }
-      }
-    }
-  });
-
-  let activehit = null;
-
-  let currentFOV = Math.PI / 2;
-
-  let gameTime = 0;
-  let timeSpeed = 0.0001;
-  let isTimePaused = false;
-  let isGamePaused = false;
-
-  let lastFrameTime = performance.now();
-  let accumulator = 0;
-  const TICK_RATE = 1000 / 20; // 50ms
-
   // 5. Main Render Loop
   function animate() {
     requestAnimationFrame(animate);
 
-    const now = performance.now();
-    const deltaTime = Math.min(now - lastFrameTime, 250); // Cap deltaTime to prevent huge jumps
-    lastFrameTime = now;
-
-    const fps = Math.round(1000 / Math.max(deltaTime, 1));
-
-    if (!isGamePaused) {
-      accumulator += deltaTime;
-      while (accumulator >= TICK_RATE) {
-        if (!isTimePaused) gameTime += TICK_RATE * timeSpeed;
-
+    timeManager.update(
+      uiManager.isGamePaused,
+      (tickRate) => {
         for (const cow of chunkManager.entities) {
-          cow.update(TICK_RATE, chunkManager);
+          cow.update(tickRate, chunkManager);
         }
-        accumulator -= TICK_RATE;
-      }
-    }
+      },
+      (deltaTime, timeScale) => {
+        const pos = player.camera.getCameraPosition();
+        chunkManager.update(pos[0], pos[2]);
 
-    const pos = camera.getCameraPosition();
-    chunkManager.update(pos[0], pos[2]);
-    camera.update(chunkManager);
+        player.update(chunkManager, timeScale, inputManager);
+      },
+    );
 
-    const view = camera.getViewMatrix();
-    const rayDirection = camera.getRay();
-    const cameraOrigin = camera.getCameraPosition();
+    const gameTime = timeManager.gameTime;
+    const fps = timeManager.fps;
 
-    activehit = Raycaster.step(cameraOrigin, rayDirection, chunkManager, 8);
+    const view = player.camera.getViewMatrix();
+    const cameraOrigin = player.camera.getCameraPosition();
 
-    let nearestCow = null;
-    let minDist = Infinity;
-    if (showEntityRay && chunkManager.entities.length > 0) {
-      for (const cow of chunkManager.entities) {
-        const dist = Math.hypot(
-          cow.x - cameraOrigin[0],
-          cow.y - cameraOrigin[1],
-          cow.z - cameraOrigin[2],
-        );
-        if (dist < minDist) {
-          minDist = dist;
-          nearestCow = cow;
-        }
-      }
-    }
+    chunkManager.renderDistance = uiManager.renderDistance;
+    timeManager.timeSpeed = uiManager.timeSpeed;
 
-    let targetedCow = null;
-    for (const cow of chunkManager.entities) {
-      const cowVec = [
-        cow.x - cameraOrigin[0],
-        cow.y + 0.6 - cameraOrigin[1],
-        cow.z - cameraOrigin[2],
-      ];
-      const dist = Math.hypot(cowVec[0], cowVec[1], cowVec[2]);
-      if (dist < 6.0) {
-        const dot =
-          (cowVec[0] / dist) * rayDirection[0] +
-          (cowVec[1] / dist) * rayDirection[1] +
-          (cowVec[2] / dist) * rayDirection[2];
-        if (dot > 0.96) {
-          targetedCow = cow;
-          break;
-        }
-      }
-    }
-
-    if (showDebugInfo) {
-      debugHUD.innerText =
-        `XYZ: ${pos[0].toFixed(0)} / ${pos[1].toFixed(0)} / ${pos[2].toFixed(0)}\n` +
-        `FPS: ${fps}\n` +
-        `Chunks Loaded: ${chunkManager.chunks.size} \n` +
-        `Entities Loaded: ${chunkManager.entities.length}\n` +
-        `Target: ${targetedCow ? "COW [HP: " + targetedCow.hp + "]" : "None"}`;
-    }
+    uiManager.renderDebug(
+      cameraOrigin,
+      fps,
+      chunkManager.chunks.size,
+      chunkManager.entities.length,
+      player.targetedEntity ? `COW [HP: ${player.targetedEntity.hp}]` : "None",
+    );
 
     const sunDirection: [number, number, number] = [
       Math.sin(gameTime),
@@ -549,12 +168,12 @@ async function initGame() {
     ];
 
     const { solid, trans } = chunkManager.getVisibleMeshes(
-      camera.getCameraPosition(),
-      camera.yaw,
+      player.camera.getCameraPosition(),
+      player.camera.yaw,
     );
 
     let isHoldingTorch = 0;
-    const heldBlockId = inventory[activeSlot];
+    const heldBlockId = player.inventoryManager.getActiveBlock();
     const heldBlockData = BLOCK_DATA[heldBlockId];
     if (heldBlockData && heldBlockData.light) {
       isHoldingTorch = heldBlockData.light / 15.0;
@@ -572,10 +191,10 @@ async function initGame() {
       solid,
       trans,
       sunDirection,
-      camera.getCameraPosition(),
+      cameraOrigin,
       isHoldingTorch,
-      now * 0.001,
-      camera.isSubmerged,
+      performance.now() * 0.001,
+      player.camera.isSubmerged,
     );
 
     for (let i = chunkManager.entities.length - 1; i >= 0; i--) {
@@ -591,32 +210,32 @@ async function initGame() {
         cowMesh,
         cow.getModelMatrix(),
         sunDirection,
-        4,
+        50,
         cow.isMoving,
         flash,
       );
     }
 
-    if (activehit) {
+    if (player.activeHit) {
       renderer.drawHighlight(
         projection,
         view,
-        activehit.x,
-        activehit.y,
-        activehit.z,
-        activehit.normal,
+        player.activeHit.x,
+        player.activeHit.y,
+        player.activeHit.z,
+        player.activeHit.normal,
         highlightLayerIndex,
       );
     }
 
-    if (showEntityRay && nearestCow) {
+    if (inputManager.showEntityRay && player.nearestEntity) {
       renderer.drawLine(
         cameraOrigin[0],
         cameraOrigin[1],
         cameraOrigin[2],
-        nearestCow.x,
-        nearestCow.y,
-        nearestCow.z,
+        player.nearestEntity.x,
+        player.nearestEntity.y,
+        player.nearestEntity.z,
         1.0,
         0.0,
         0.0,

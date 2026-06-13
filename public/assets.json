@@ -79,6 +79,9 @@
             "icon" : "textures/icon/tall_grass.png",
             "transparent" : true,
             "isPlant" : true
+        },
+        "cow": {
+            "All" : "textures/entity/cow.png"
         }
     },
     "system": {
