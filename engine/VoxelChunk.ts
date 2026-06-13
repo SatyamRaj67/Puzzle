@@ -364,7 +364,7 @@ export class VoxelChunk {
 
               const blockId = maskVal & 0x00ff;
               const blockData = this.blockRegistry[blockId.toString()];
-              const isTrans = blockData && blockData.transparent;
+              const isFluid = blockData && blockData.isFluid;
 
               let width = 1;
               let height = 1;
@@ -452,7 +452,7 @@ export class VoxelChunk {
                     : [ao20, ao00, ao02, ao22];
               }
 
-              if (isTrans) {
+              if (isFluid) {
                 this.generateOptimizedQuad(
                   axis,
                   dirMultiplier,
@@ -505,14 +505,14 @@ export class VoxelChunk {
 
           const bData = this.blockRegistry[blockId.toString()];
           if (bData && bData.isPlant) {
-            transVertexCount = this.packPlantCross(
+            solidVertexCount = this.packPlantCross(
               px,
               py,
               pz,
               bData,
-              transData,
-              transIndices,
-              transVertexCount,
+              solidData,
+              solidIndices,
+              solidVertexCount,
               cx,
               cz,
               manager,
@@ -724,7 +724,7 @@ export class VoxelChunk {
     x: number,
     y: number,
     z: number,
-    blockData: { All?: number, Side?: number },
+    blockData: { All?: number; Side?: number },
     packedData: number[],
     indices: number[],
     vertexCount: number,

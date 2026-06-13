@@ -47,8 +47,8 @@ export class FirstPersonCamera {
 
     this.viewMatrix = Mat4.create();
 
-    this.baseSpeed = 0.22;
-    this.sprintSpeed = 0.32; // Movement speed
+    this.baseSpeed = 0.15;
+    this.sprintSpeed = 0.22; // Movement speed
     this.baseWaterSpeed = 0.12; // Speed when in water
     this.speed = this.baseSpeed;
 
@@ -77,6 +77,13 @@ export class FirstPersonCamera {
       Math.min(Math.PI / 2 - 0.01, this.pitch),
     );
 
+    if (input.flyToggled) {
+      this.isFlying = !this.isFlying;
+      if (this.isFlying) {
+        this.velocity[1] = 0;
+      }
+    }
+
     const eyePos = this.getCameraPosition();
     const eyeBlock = chunkManager.getBlock(
       Math.floor(eyePos[0]),
@@ -95,13 +102,13 @@ export class FirstPersonCamera {
     this.isSubmerged = !!(eyeData && eyeData.isFluid);
     this.inFluid = !!((feetData && feetData.isFluid) || this.isSubmerged);
 
-    if (input.flyToggled) {
-      this.isFlying = !this.isFlying;
-      this.speed = this.baseSpeed * (this.isSprinting ? 2 : 1);
+    if (this.isFlying) {
+      this.speed =
+        this.baseSpeed * (input.isSprinting || input.keys["ShiftLeft"] ? 2 : 1);
       this.velocity[1] = 0;
     } else if (this.inFluid) {
-      this.speed = this.baseWaterSpeed * (this.isSprinting ? 2 : 1);
-    } else if (input.keys["ShiftLeft"] || this.isSprinting) {
+      this.speed = this.baseWaterSpeed * (input.isSprinting ? 2 : 1);
+    } else if (input.keys["ShiftLeft"] || input.isSprinting) {
       this.speed = this.sprintSpeed;
     } else {
       this.speed = this.baseSpeed;
@@ -118,22 +125,22 @@ export class FirstPersonCamera {
 
     const currentSpeed = this.speed * timeScale;
 
-    if (input.keys["KeyW"]) {
+    if (input.keys["KeyW"] || input.keys["ArrowUp"]) {
       dx -= forwardX * currentSpeed;
       dz -= forwardZ * currentSpeed;
     }
 
-    if (input.keys["KeyS"]) {
+    if (input.keys["KeyS"] || input.keys["ArrowDown"]) {
       dx += forwardX * currentSpeed;
       dz += forwardZ * currentSpeed;
     }
 
-    if (input.keys["KeyA"]) {
+    if (input.keys["KeyA"] || input.keys["ArrowLeft"]) {
       dx += rightX * currentSpeed;
       dz += rightZ * currentSpeed;
     }
 
-    if (input.keys["KeyD"]) {
+    if (input.keys["KeyD"] || input.keys["ArrowRight"]) {
       dx -= rightX * currentSpeed;
       dz -= rightZ * currentSpeed;
     }

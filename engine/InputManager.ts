@@ -13,6 +13,9 @@ export class InputManager {
   public movementY: number = 0;
 
   public flyToggled: boolean = false;
+  public isSprinting: boolean = false;
+
+  private lastWPress: number = 0;
   private lastSpacePress: number = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -36,10 +39,20 @@ export class InputManager {
         }
         this.lastSpacePress = now;
       }
+      if (e.code === "KeyW" && !e.repeat) {
+        const now = performance.now();
+        if (now - this.lastWPress < 300) {
+          this.isSprinting = true;
+        }
+        this.lastWPress = now;
+      }
     });
 
     document.addEventListener("keyup", (e) => {
       this.keys[e.code] = false;
+      if (e.code === "KeyW") {
+        this.isSprinting = false;
+      }
     });
 
     document.addEventListener("mousemove", (e) => {
@@ -49,20 +62,20 @@ export class InputManager {
     });
 
     this.canvas.addEventListener("mousedown", (e) => {
-        if (document.pointerLockElement !== this.canvas) return;
-        if (e.button === 0) this.leftClick = true;
-        if (e.button === 2) this.rightClick = true;
-    })
+      if (document.pointerLockElement !== this.canvas) return;
+      if (e.button === 0) this.leftClick = true;
+      if (e.button === 2) this.rightClick = true;
+    });
 
     this.canvas.addEventListener("mouseup", (e) => {
-        if (e.button === 0) this.leftClick = false;
-        if (e.button === 2) this.rightClick = false;
-    })
+      if (e.button === 0) this.leftClick = false;
+      if (e.button === 2) this.rightClick = false;
+    });
 
     window.addEventListener("wheel", (e) => {
-        if (document.pointerLockElement !== this.canvas) return;
-        this.scrollDelta = Math.sign(e.deltaY);
-    })
+      if (document.pointerLockElement !== this.canvas) return;
+      this.scrollDelta = Math.sign(e.deltaY);
+    });
   }
 
   public resetFrameSpecificInputs() {
