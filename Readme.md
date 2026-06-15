@@ -16,3 +16,7 @@ Left Shift: Down
 Double Space to Fly (Also Disables Collision so be aware and use carefully)
 
 Press F3 for Debug tools like seeing Chunks Rendered, Entities Renedered and Chunk Co-ordinates
+
+This is to show that you can build your own engine, given instructions and it is not that hard. You don't always have to rely on third party dependencies. I actually Hate 3rd party dependencies, so much so, that I even wrote my Math.ts, LMAO.. But still.. 
+
+It was a blast working on this project, and yah by blast, I really mean, I at last was working on TNT, and yah it cooked me too much, so I cooked it and say, this is about the end, I am willing to take. I am tired of working on stuff, and it has become hard for me to maintain or work now. Sorry..
