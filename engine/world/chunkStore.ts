@@ -24,7 +24,7 @@ export class ChunkStore {
 
   public setChunkData(cx: number, cz: number, data: Uint8Array) {
     const chunk = new Chunk();
-    chunk.data = data;
+    chunk.data = data as Uint8Array<ArrayBuffer>;
     this.chunks.set(`${cx},${cz}`, chunk);
   }
 
@@ -45,5 +45,35 @@ export class ChunkStore {
     const lz = wz - cz * Chunk.DEPTH;
 
     return chunk.getBlock(lx, wy, lz);
+  }
+
+  public getLight(wx: number, wy: number, wz: number): number {
+    if (wy < 0 || wy >= Chunk.HEIGHT) return 15 << 4;
+
+    const cx = Math.floor(wx / Chunk.WIDTH);
+    const cz = Math.floor(wz / Chunk.DEPTH);
+
+    const chunk = this.chunks.get(`${cx},${cz}`);
+    if (!chunk) return 15 << 4;
+
+    const lx = wx - cx * Chunk.WIDTH;
+    const lz = wz - cz * Chunk.DEPTH;
+
+    return chunk.getLight(lx, wy, lz);
+  }
+
+  public setLight(wx: number, wy: number, wz: number, lightVal: number) {
+    if (wy < 0 || wy >= Chunk.HEIGHT) return;
+
+    const cx = Math.floor(wx / Chunk.WIDTH);
+    const cz = Math.floor(wz / Chunk.DEPTH);
+
+    const chunk = this.chunks.get(`${cx},${cz}`);
+    if (!chunk) return;
+
+    const lx = wx - cx * Chunk.WIDTH;
+    const lz = wz - cz * Chunk.DEPTH;
+
+    chunk.setLight(lx, wy, lz, lightVal);
   }
 }

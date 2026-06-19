@@ -9,6 +9,7 @@ export interface ParsedBlock {
   isFluid: boolean;
   isOpaque: boolean;
   lightAttenuation: number;
+  lightEmission: number;
   frames: number;
   speed: number;
 
@@ -32,11 +33,12 @@ export class BlockRegistry {
         isFluid: def.isFluid ?? false,
         isOpaque: def.isOpaque ?? true,
         lightAttenuation: def.lightAttenuation ?? 15, // Default to Opaque
+        lightEmission: def.lightEmission ?? 0, // Default to No Light Emission
         frames: def.frames ?? 1, // Default to Static
         speed: def.speed ?? 0,
         textures: this.normalizeTextures(def),
         textureIds: [],
-        icon: def.icon ?? "",
+        icon: def.icon ?? def.name.toLowerCase(),
       };
 
       this.blocks[i] = parsed;

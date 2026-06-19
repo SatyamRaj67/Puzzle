@@ -12,6 +12,7 @@ export interface BlockDefinition {
   speed?: number;
   isFluid?: boolean;
   lightAttenuation?: number; // 0 = fully transparent, 15 = fully opaque
+  lightEmission?: number; // 0 = no light, 15 = maximum light
   isOpaque?: boolean;           // Does the texture have holes? (e.g. leaves)
 }
 
@@ -20,6 +21,7 @@ export const BlockData: BlockDefinition[] = [
     name: "Air",
     texture: "", 
     lightAttenuation: 0,
+    isOpaque: false,
   },
   {
     name: "dirt",
@@ -54,6 +56,7 @@ export const BlockData: BlockDefinition[] = [
     texture: "/Puzzle/textures/model/glowstone.png",
     icon: "/Puzzle/textures/icon/glowstone.png",
     lightAttenuation: 0, 
+    lightEmission: 15,
   },
   {
     name: "oak_log",
@@ -76,5 +79,6 @@ export const BlockData: BlockDefinition[] = [
       diagonal1: "/Puzzle/textures/model/grass.png",
     },
     lightAttenuation: 1,
+    isOpaque: false
   },
 ];

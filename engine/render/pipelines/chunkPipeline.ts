@@ -1,7 +1,7 @@
 import type { GPUState } from "../../gpu/device";
 import chunkShader from "../shaders/chunk.wgsl?raw";
 
-export function createChunkPipeline(gpu: GPUState) {
+function getSharedPipelineConfig(gpu: GPUState): GPURenderPipelineDescriptor {
   const shaderModule = gpu.device.createShaderModule({
     label: "Chunk Shader",
     code: chunkShader,
@@ -11,7 +11,7 @@ export function createChunkPipeline(gpu: GPUState) {
     entries: [
       {
         binding: 0,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage. FRAGMENT,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
         buffer: {},
       },
     ],
@@ -33,18 +33,19 @@ export function createChunkPipeline(gpu: GPUState) {
     bindGroupLayouts: [bindGroupLayout0, bindGroupLayout1, bindGroupLayout2],
   });
 
-  return gpu.device.createRenderPipeline({
-    label: "Chunk Pipeline",
+  return {
+    label: "Base Chunk Pipeline",
     layout: pipelineLayout,
     vertex: {
       module: shaderModule,
       entryPoint: "vs_main",
       buffers: [
         {
-          arrayStride: 8, // 2 uint32s * 4bytes each
+          arrayStride: 12, 
           attributes: [
-            { shaderLocation: 0, offset: 0, format: "uint32" }, // data1
-            { shaderLocation: 1, offset: 4, format: "uint32" }, // data2
+            { shaderLocation: 0, offset: 0, format: "uint32" }, 
+            { shaderLocation: 1, offset: 4, format: "uint32" }, 
+            { shaderLocation: 2, offset: 8, format: "uint32" }, 
           ],
         },
       ],
@@ -52,30 +53,58 @@ export function createChunkPipeline(gpu: GPUState) {
     fragment: {
       module: shaderModule,
       entryPoint: "fs_main",
-      targets: [{ 
-        format: gpu.format ,
-        blend: {
-          color: {
-            srcFactor: "src-alpha",
-            dstFactor: "one-minus-src-alpha",
-            operation: "add",
+      targets: [
+        {
+          format: gpu.format,
+          blend: {
+            color: {
+              srcFactor: "src-alpha",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add",
+            },
+            alpha: {
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add",
+            },
           },
-          alpha: {
-            srcFactor: "one",
-            dstFactor: "one-minus-src-alpha",
-            operation: "add",
-          }
-        }
-      }],
+        },
+      ],
     },
-    primitive: {
-      topology: "triangle-list",
-      cullMode: "none",
-    },
-    depthStencil: {
-      depthWriteEnabled: true,
-      depthCompare: "less",
-      format: "depth24plus",
-    },
-  });
+    primitive: { topology: "triangle-list" }
+  };
+}
+
+export function createChunkPipeline(gpu: GPUState): GPURenderPipeline {
+  const config = getSharedPipelineConfig(gpu);
+  
+  config.label = "Opaque Chunk Pipeline";
+  config.primitive = {
+    topology: "triangle-list",
+    cullMode: "back",
+  };
+  config.depthStencil = {
+    depthWriteEnabled: true,
+    depthCompare: "less",
+    format: "depth24plus",
+  };
+
+  return gpu.device.createRenderPipeline(config);
+}
+
+export function createTranslucentPipeline(gpu: GPUState): GPURenderPipeline {
+  const config = getSharedPipelineConfig(gpu);
+  
+  config.label = "Translucent Chunk Pipeline";
+  config.primitive = {
+    topology: "triangle-list",
+    cullMode: "none",
+  };
+  config.depthStencil = {
+    depthWriteEnabled: false,
+    depthCompare: "less",
+    format: "depth24plus",
+  };
+
+  return gpu.device.createRenderPipeline(config);
 }

@@ -11,7 +11,7 @@ export class GreedyMesher {
     chunkX: number,
     chunkZ: number,
   ): ChunkMesh {
-    const faces: number[][] = [[], [], [], [], [], [], [], [], [], []];
+    const faces: number[][] = Array.from({ length: 16 }, () => []);
 
     const startX = chunkX * Chunk.WIDTH;
     const startZ = chunkZ * Chunk.DEPTH;
@@ -110,16 +110,21 @@ export class GreedyMesher {
           const wx = startX + x;
           const blockId = store.getBlock(wx, wy, wz);
 
-          if (blockId !== 0 && BlockRegistry.getBlock(blockId).renderType !== 'CROSS') {
+          if (
+            blockId !== 0 &&
+            BlockRegistry.getBlock(blockId).renderType !== "CROSS"
+          ) {
             const neighborZPlus = store.getBlock(wx, wy, wz + 1);
             if (BlockRegistry.shouldRenderFace(blockId, neighborZPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 0);
-              mask0[y * Chunk.WIDTH + x] = blockId | (ao << 16);
+              const light = store.getLight(wx, wy, wz + 1);
+              mask0[y * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
             }
             const neighborZMinus = store.getBlock(wx, wy, wz - 1);
             if (BlockRegistry.shouldRenderFace(blockId, neighborZMinus)) {
               const ao = AO.compute(store, wx, wy, wz, 1);
-              mask1[y * Chunk.WIDTH + x] = blockId | (ao << 16);
+              const light = store.getLight(wx, wy, wz - 1);
+              mask1[y * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
             }
           }
         }
@@ -131,7 +136,7 @@ export class GreedyMesher {
         Chunk.WIDTH,
         Chunk.HEIGHT,
         0,
-        faces[0],
+        faces,
         chunkX,
         chunkZ,
       );
@@ -142,7 +147,7 @@ export class GreedyMesher {
         Chunk.WIDTH,
         Chunk.HEIGHT,
         0,
-        faces[1],
+        faces,
         chunkX,
         chunkZ,
       );
@@ -161,16 +166,21 @@ export class GreedyMesher {
           const wx = startX + x;
           const blockId = store.getBlock(wx, wy, wz);
 
-          if (blockId !== 0 && BlockRegistry.getBlock(blockId).renderType !== 'CROSS') {
+          if (
+            blockId !== 0 &&
+            BlockRegistry.getBlock(blockId).renderType !== "CROSS"
+          ) {
             const neighborYPlus = store.getBlock(wx, wy + 1, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborYPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 2);
-              mask2[z * Chunk.WIDTH + x] = blockId | (ao << 16);
+              const light = store.getLight(wx, wy + 1, wz);
+              mask2[z * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
             }
             const neighborYMinus = store.getBlock(wx, wy - 1, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborYMinus)) {
               const ao = AO.compute(store, wx, wy, wz, 3);
-              mask3[z * Chunk.WIDTH + x] = blockId | (ao << 16);
+              const light = store.getLight(wx, wy - 1, wz);
+              mask3[z * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
             }
           }
         }
@@ -182,7 +192,7 @@ export class GreedyMesher {
         Chunk.WIDTH,
         Chunk.DEPTH,
         1,
-        faces[2],
+        faces,
         chunkX,
         chunkZ,
       );
@@ -193,7 +203,7 @@ export class GreedyMesher {
         Chunk.WIDTH,
         Chunk.DEPTH,
         1,
-        faces[3],
+        faces,
         chunkX,
         chunkZ,
       );
@@ -212,16 +222,21 @@ export class GreedyMesher {
           const wz = startZ + z;
           const blockId = store.getBlock(wx, wy, wz);
 
-          if (blockId !== 0 && BlockRegistry.getBlock(blockId).renderType !== 'CROSS') {
+          if (
+            blockId !== 0 &&
+            BlockRegistry.getBlock(blockId).renderType !== "CROSS"
+          ) {
             const neighborXPlus = store.getBlock(wx + 1, wy, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborXPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 4);
-              mask4[y * Chunk.DEPTH + z] = blockId | (ao << 16);
+              const light = store.getLight(wx + 1, wy, wz);
+              mask4[y * Chunk.DEPTH + z] = blockId | (ao << 16) | (light << 24);
             }
             const neighborXMinus = store.getBlock(wx - 1, wy, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborXMinus)) {
               const ao = AO.compute(store, wx, wy, wz, 5);
-              mask5[y * Chunk.DEPTH + z] = blockId | (ao << 16);
+              const light = store.getLight(wx - 1, wy, wz);
+              mask5[y * Chunk.DEPTH + z] = blockId | (ao << 16) | (light << 24);
             }
           }
         }
@@ -233,7 +248,7 @@ export class GreedyMesher {
         Chunk.DEPTH,
         Chunk.HEIGHT,
         2,
-        faces[4],
+        faces,
         chunkX,
         chunkZ,
       );
@@ -244,7 +259,7 @@ export class GreedyMesher {
         Chunk.DEPTH,
         Chunk.HEIGHT,
         2,
-        faces[5],
+        faces,
         chunkX,
         chunkZ,
       );
@@ -252,7 +267,7 @@ export class GreedyMesher {
 
     return {
       vertices: faces.map((arr) => new Uint32Array(arr)),
-      vertexCounts: faces.map((arr) => arr.length / 2),
+      vertexCounts: faces.map((arr) => arr.length / 3),
     };
   }
 
@@ -266,7 +281,7 @@ export class GreedyMesher {
     maxU: number,
     maxV: number,
     axis: number,
-    out: number[],
+    faces: number[][],
     chunkX: number,
     chunkZ: number,
   ) {
@@ -277,6 +292,7 @@ export class GreedyMesher {
 
         const blockId = val & 0xffff;
         const ao = (val >> 16) & 0xff;
+        const light = (val >> 24) & 0xff;
 
         let w = 1;
         while (u + w < maxU && w < 32) {
@@ -284,8 +300,14 @@ export class GreedyMesher {
 
           const nextId = nextVal & 0xffff;
           const nextAO = (nextVal >> 16) & 0xff;
-
-          if (nextId !== blockId || nextAO !== ao || ao !== 0) break;
+          const nextLight = (nextVal >> 24) & 0xff;
+          if (
+            nextId !== blockId ||
+            nextAO !== ao ||
+            nextLight !== light ||
+            ao !== 0
+          )
+            break;
 
           w++;
         }
@@ -298,8 +320,14 @@ export class GreedyMesher {
             const nextVal = mask[(v + h) * maxU + (u + i)];
             const nextId = nextVal & 0xffff;
             const nextAo = (nextVal >> 16) & 0xff;
+            const nextLight = (nextVal >> 24) & 0xff;
 
-            if (nextId !== blockId || nextAo !== ao || ao !== 0) {
+            if (
+              nextId !== blockId ||
+              nextAo !== ao ||
+              nextLight !== light ||
+              ao !== 0
+            ) {
               done = true;
               break;
             }
@@ -335,20 +363,29 @@ export class GreedyMesher {
 
         const data1 = Format.packData1(x, y, z, tex_id, w, h);
         const data2 = Format.packData2(ao, chunkX, chunkZ);
+        const data3 = Format.packData3(light);
 
-        out.push(
+        const targetFaceId = block.isFluid ? faceId + 10 : faceId;
+
+        faces[targetFaceId].push(
           data1,
           data2,
+          data3,
           data1,
           data2,
+          data3,
           data1,
           data2,
+          data3,
           data1,
           data2,
+          data3,
           data1,
           data2,
+          data3,
           data1,
           data2,
+          data3,
         );
 
         for (let j = 0; j < h; j++) {

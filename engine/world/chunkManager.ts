@@ -52,7 +52,7 @@ export class ChunkManager {
         };
 
         const buffers: GPUBuffer[] = [];
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 16; i++) {
           if (chunkMesh.vertexCounts[i] > 0) {
             buffers[i] = this.renderer.createVertexBuffer(
               chunkMesh.vertices[i],
@@ -116,7 +116,7 @@ export class ChunkManager {
     }
   }
 
-  public draw(camera: FPCamera, elapsedTime: number, gameTime: GameTime) {
+  public draw(camera: FPCamera, elapsedTime: number, gameTime: GameTime, heldLightLevel: number) {
     this.frustum.updateFromMatrix(camera.viewProjMatrix);
 
     const visibleChunks: LoadedChunk[] = [];
@@ -133,7 +133,7 @@ export class ChunkManager {
         visibleChunks.push(chunk);
       }
     }
-    this.renderer.drawMultiple(camera, elapsedTime, visibleChunks, gameTime);
+    this.renderer.drawMultiple(camera, elapsedTime, visibleChunks, gameTime, heldLightLevel);
   }
 
   /** Asks the background worker to build a chunk */

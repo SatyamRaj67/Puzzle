@@ -1,4 +1,5 @@
 import { GreedyMesher } from "../mesher/greedyMesher";
+import { LightingEngine } from "../physics/lighting";
 import { TerrainGenerator } from "../worldgen/terrain";
 import { BlockRegistry } from "./blockRegistry";
 import { ChunkStore } from "./chunkStore";
@@ -27,7 +28,7 @@ self.onmessage = (event: MessageEvent) => {
     const transferList: ArrayBuffer[] = [];
     const buffersToSend: ArrayBuffer[] = [];
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 16; i++) {
       const buffer = meshData.vertices[i].buffer as ArrayBuffer;
       buffersToSend.push(buffer);
       if (meshData.vertexCounts[i] > 0) {
@@ -61,6 +62,12 @@ self.onmessage = (event: MessageEvent) => {
       }
     }
 
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        LightingEngine.calculateChunk(store, chunkX + dx, chunkZ + dz);
+      }
+    }
+
     const rawDataClone = store.getOrCreateChunk(chunkX, chunkZ).data.slice();
     remeshAndSend(chunkX, chunkZ, rawDataClone);
   }
@@ -74,6 +81,12 @@ self.onmessage = (event: MessageEvent) => {
       const lz = wz - chunkZ * 16;
 
       chunk.setBlock(lx, wy, lz, blockId);
+
+      for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -1; dz <= 1; dz++) {
+              LightingEngine.calculateChunk(store, chunkX + dx, chunkZ + dz);
+          }
+      }
       
       remeshAndSend(chunkX, chunkZ);
 

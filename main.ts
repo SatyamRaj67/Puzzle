@@ -183,7 +183,19 @@ async function bootstrap() {
         chunkManager.loadedChunks.size,
       );
 
-      chunkManager.draw(camera, engineTime.elapsedTime, gameTime);
+      const activeBlockId = ui.getActiveBlockId();
+
+      let heldLightLevel = 0.0;
+      if (activeBlockId !== 0) {
+        heldLightLevel =
+          BlockRegistry.getBlock(activeBlockId).lightEmission / 15.0;
+      }
+      chunkManager.draw(
+        camera,
+        engineTime.elapsedTime,
+        gameTime,
+        heldLightLevel,
+      );
     }
 
     const engineTime = new Time(fixedUpdate, render);

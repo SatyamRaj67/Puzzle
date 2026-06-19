@@ -33,14 +33,27 @@ export class Format {
 
   /** Lighting and AO
    * *Bit Layout
-   * [0-7] Ambient Occlusion, 
-   * [8-19] Chunk X (12-bit signed), 
+   * [0-7] Ambient Occlusion,
+   * [8-19] Chunk X (12-bit signed),
    * [20-31] Chunk Z (12-bit signed)
    */
-  public static packData2(packedAO: number, chunkX: number, chunkZ: number): number {
+  public static packData2(
+    packedAO: number,
+    chunkX: number,
+    chunkZ: number,
+  ): number {
     const cx = chunkX & 0xfff;
     const cz = chunkZ & 0xfff;
-    
-    return packedAO & 0xff | (cx << 8) | (cz << 20);
+
+    return (packedAO & 0xff) | (cx << 8) | (cz << 20);
+  }
+
+  /** Sunlight and Block Light
+   * *Bit Layout
+   * [0-7] SunLight & BlockLight,
+   * [8-31] Reserved
+   */
+  public static packData3(light: number): number {
+    return light & 0xff;
   }
 }

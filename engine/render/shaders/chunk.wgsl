@@ -6,6 +6,7 @@ struct GlobalUniform {
     cameraPosX: f32,
     cameraPosY: f32,
     cameraPosZ: f32,
+    heldLight: f32,
 };
 
 struct FaceUnifrom {
@@ -31,6 +32,7 @@ struct VertexInput {
     @builtin(vertex_index) vertex_index: u32,
     @location(0) data1: u32,
     @location(1) data2: u32,
+    @location(2) data3: u32,
 };
 
 struct VertexOutput{
@@ -39,6 +41,7 @@ struct VertexOutput{
     @location(1) shade: f32,
     @location(2) texture_id: f32,
     @location(3) sky_tint: vec3<f32>,
+    @location(4) world_pos: vec3<f32>,
 }
 
 var<private> cube_corners: array<vec3<f32>, 60> = array<vec3<f32>, 60>(
@@ -83,19 +86,11 @@ var<private> face_shading: array<f32, 10> = array<f32, 10>(
     1.0
 );
 
-var<private> face_normals: array<vec3<f32>, 10> = array<vec3<f32>, 10>(
-    vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, -1.0),
-    vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, -1.0, 0.0),
-    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(-1.0, 0.0, 0.0),
-
-    vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), 
-    vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0)
-);
-
 @vertex
 fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
+    // --- GEOMETRY DATA EXTRACTION ---
     let x = f32(model.data1 & 0xFu);
     let y = f32((model.data1 >> 4u) & 0x7Fu);
     let z = f32((model.data1 >> 11u) & 0xFu);
@@ -103,7 +98,7 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     let w = f32((model.data1 >> 22u) & 0x1Fu) + 1.0;
     let h = f32((model.data1 >> 27u) & 0x1Fu) + 1.0;
 
-    
+    // --- CHUNK POSITION CALCULATION ---
     let d2 = i32(model.data2);
     let chunk_x = f32((d2 << 12u) >> 20u);
     let chunk_z = f32(d2 >> 20u);
@@ -126,6 +121,7 @@ fn vs_main(model: VertexInput) -> VertexOutput {
         z + (chunk_z * 16.0)
     ) + corner_offset;
     out.clip_position = globals.viewProj * vec4<f32>(world_pos, 1.0);
+    out.world_pos = world_pos;
 
     let base_uv = quad_uvs[model.vertex_index % 6u];
 
@@ -142,20 +138,22 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     };
     let ao_multiplier = 1.0 - (ao_level * 0.25); 
 
-    let normal = face_normals[face_dir];
-    let sun_dir = normalize(globals.sunDir);
-    let direct_light = max(dot(normal, sun_dir), 0.0);
+    // --- LIGHTING CALCULATION ---
+    let raw_light = model.data3;
+    let sun_light = f32((raw_light >> 4u) & 0xFu) / 15.0;
+    let blk_light = f32(raw_light & 0xFu) / 15.0;
 
-    let ambient_light = max(sun_dir.y * 0.5 + 0.1, 0.2);
-    let total_illumination = ambient_light + (direct_light * 0.6);
+    let torch_color = vec3<f32>(1.0, 0.85, 0.7) * blk_light;
 
-   out.shade = face_shading[face_dir] * ao_multiplier * total_illumination;
+    let sun_factor = clamp(globals.sunDir.y + 0.2, 0.0, 1.0);
+    let sun_color = vec3<f32>(1.0, 1.0, 1.0) * (sun_light * sun_factor);
 
-    // --- DAY/NIGHT TINT ---
-    let night_tint = vec3<f32>(0.2, 0.3, 0.6);
-    let day_tint = vec3<f32>(1.0, 1.0, 1.0);
-    let day_factor = clamp(sun_dir.y + 0.2, 0.0, 1.0); 
-    out.sky_tint = mix(night_tint, day_tint, day_factor);
+    let final_illumination = max(torch_color, sun_color);
+
+    let base_ambient = vec3<f32>(0.02, 0.02, 0.03);
+
+   out.shade = face_shading[face_dir] * ao_multiplier;
+   out.sky_tint = final_illumination + base_ambient;
 
   // --- ANIMATION LOGIC ---
   let anim_props = anim_buffer.data[tex_id];
@@ -199,6 +197,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    let final_color = tex_color.rgb * in.shade * in.sky_tint;
+    // --- DYNAMIC PLAYER LIGHT ---
+    var dynamic_light = vec3<f32>(0.0);
+
+    if (globals.heldLight > 0.0) {
+        let camera_pos = vec3<f32>(globals.cameraPosX, globals.cameraPosY, globals.cameraPosZ);
+        let dist = distance(camera_pos, in.world_pos);
+
+        let light_radius = 10.0;
+        let intensity = max(0.0, 1.0 - (dist / light_radius)) * globals.heldLight / 2;
+        
+        dynamic_light = vec3<f32>(1.0, 0.8, 0.5) * intensity;
+    }
+
+    let total_light = in.sky_tint + dynamic_light;
+
+    let final_color = tex_color.rgb * in.shade * total_light;
     return vec4<f32>(final_color, tex_color.a);
 }

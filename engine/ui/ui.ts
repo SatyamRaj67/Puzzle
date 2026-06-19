@@ -84,7 +84,7 @@ export class UI {
       BlockRegistry.getId("oak_leaves"), // 4
       BlockRegistry.getId("glowstone"), // 5
       BlockRegistry.getId("water"), // 6
-      0,
+      BlockRegistry.getId("grass"), // 7
       0,
     ];
 
