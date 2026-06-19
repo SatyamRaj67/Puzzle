@@ -10,9 +10,6 @@ export class Renderer {
   private cameraBuffer: GPUBuffer;
   private bindGroup: GPUBindGroup;
 
-  private vertexBuffers: GPUBuffer[] = [];
-  private vertexCounts: number[] = [0, 0, 0, 0, 0, 0];
-
   private faceUniformBuffers: GPUBuffer[] = [];
   private faceBindGroups: GPUBindGroup[] = [];
 
@@ -81,60 +78,6 @@ export class Renderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
     this.depthTextureView = this.depthTexture.createView();
-  }
-
-  public draw(camera: FPCamera, elapsedTime: number) {
-    const uploadData = new Float32Array(24);
-    uploadData.set(camera.viewProjMatrix, 0);
-    uploadData[16] = elapsedTime;
-
-    this.gpu.device.queue.writeBuffer(
-      this.cameraBuffer,
-      0,
-      uploadData.buffer,
-      uploadData.byteOffset,
-      uploadData.byteLength,
-    );
-
-    const commandEncoder = this.gpu.device.createCommandEncoder();
-    const textureView = this.gpu.context.getCurrentTexture().createView();
-
-    const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: textureView,
-          clearValue: { r: 0, g: 0, b: 0, a: 1.0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
-      depthStencilAttachment: {
-        view: this.depthTextureView,
-        depthClearValue: 1.0,
-        depthLoadOp: "clear",
-        depthStoreOp: "store",
-      },
-    });
-
-    renderPass.setPipeline(this.pipeline);
-    renderPass.setBindGroup(0, this.bindGroup);
-
-    if (this.textureAtlas.bindGroup) {
-      renderPass.setPipeline(this.pipeline);
-      renderPass.setBindGroup(0, this.bindGroup);
-      renderPass.setBindGroup(1, this.textureAtlas.bindGroup);
-
-      for (let i = 0; i < 6; i++) {
-        if (this.vertexCounts[i] > 0 && this.vertexBuffers[i]) {
-          renderPass.setBindGroup(2, this.faceBindGroups[i]);
-          renderPass.setVertexBuffer(0, this.vertexBuffers[i]);
-          renderPass.draw(this.vertexCounts[i]);
-        }
-      }
-    }
-
-    renderPass.end();
-    this.gpu.device.queue.submit([commandEncoder.finish()]);
   }
 
   public createVertexBuffer(data: Uint32Array): GPUBuffer {
