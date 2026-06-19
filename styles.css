@@ -14,12 +14,17 @@
     letter-spacing: 0.1em;
 }
 
+body {
+    overflow: hidden;
+}
+
 canvas {
     display: block;
     width: 100vw;
     height: 100vh;
 }
 
+/* === RANGE INPUT === */
 input[type="range"] {
     appearance: none;
     -webkit-appearance: none;
@@ -31,15 +36,15 @@ input[type="range"] {
 }
 
 input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 15px;
-  height: 40px;
-  background: #bbb;
-  cursor: pointer;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  outline: 2px solid #000;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 40px;
+    background: #bbb;
+    cursor: pointer;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    outline: 2px solid #000;
 }
 
 /* === CROSSHAIR === */
@@ -48,8 +53,9 @@ input[type="range"]::-webkit-slider-thumb {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 10px;
-    height: 10px;
+    pointer-events: none;
+    width: 20px;
+    height: 20px;
     pointer-events: none;
     mix-blend-mode: difference;
 }
@@ -91,6 +97,7 @@ input[type="range"]::-webkit-slider-thumb {
     display: none;
 }
 
+
 /* === PAUSE MENU === */
 #pause-menu {
     position: absolute;
@@ -107,6 +114,7 @@ input[type="range"]::-webkit-slider-thumb {
     font-family: sans-serif;
     z-index: 10;
 }
+
 
 .menu-container {
     width: 300px;
@@ -139,7 +147,7 @@ input[type="range"]::-webkit-slider-thumb {
     outline: 2px solid #000;
 }
 
-.setting-group:has(input[type="range"]){
+.setting-group:has(input[type="range"]) {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -149,11 +157,11 @@ input[type="range"]::-webkit-slider-thumb {
     padding-bottom: 1em;
 }
 
-.setting-group:has(input[type="range"]) label{
+.setting-group:has(input[type="range"]) label {
     padding: 1em;
 }
 
-.setting-group:has(input[type="range"]) input{
+.setting-group:has(input[type="range"]) input {
     width: 100%;
 }
 
@@ -213,12 +221,12 @@ input[type="range"]::-webkit-slider-thumb {
     z-index: 10;
 }
 
-#inventory-grid{
+#inventory-grid {
     display: grid;
     grid-template-columns: repeat(9, 2.25em);
 }
 
-#inventory-grid .inventory-slot{
+#inventory-grid .inventory-slot {
     width: 2.25em;
     height: 2.25em;
     border: 2px solid #777;
@@ -228,13 +236,13 @@ input[type="range"]::-webkit-slider-thumb {
     cursor: pointer;
 }
 
-#inventory-grid .inventory-slot img{
+#inventory-grid .inventory-slot img {
     max-width: 32px;
     max-height: 32px;
     object-fit: contain;
 }
 
-#cursor-item{
+#cursor-item {
     display: none;
     position: absolute;
     width: 2em;
@@ -256,7 +264,6 @@ input[type="range"]::-webkit-slider-thumb {
     padding: 5px;
     border-radius: 5px;
     pointer-events: none;
-    /* Let clicks pass through to the game */
 }
 
 .slot {

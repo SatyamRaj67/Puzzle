@@ -1,253 +1,198 @@
-import { ChunkManager } from "./engine/ChunkManager";
-import { compileRegistry } from "./engine/AssetsCompiler";
-import { Entity } from "./engine/Entity";
-import { Mat4 } from "./engine/Math";
-import { WebGLRenderer } from "./engine/WebGLRenderer";
-import { WebGPURenderer } from "./engine/WebGPURenderer";
-import type { BlockIdMap, IRenderer } from "./engine/types";
-import { TimeManager } from "./engine/TimeManager";
-import { InputManager } from "./engine/InputManager";
-import { UIManager } from "./engine/UIManager";
-import { Player } from "./engine/Player";
+import { Input } from "./engine/core/input";
+import { mat4 } from "./engine/core/math/mat4";
+import { Time } from "./engine/core/time";
+import { initWebGPU } from "./engine/gpu/device";
+import { Raycaster } from "./engine/physics/raycast";
+import { FPCamera } from "./engine/render/camera/fpCamera";
+import { Renderer } from "./engine/render/renderer";
+import { UI } from "./engine/ui/ui";
+import { BlockRegistry } from "./engine/world/blockRegistry";
+import { ChunkManager } from "./engine/world/chunkManager";
+import { GameTime } from "./engine/world/gameTime";
 
-// === CANVAS ===
-const canvas = document.getElementById("gameCanvas")! as HTMLCanvasElement;
+const canvas = document.createElement("canvas") as HTMLCanvasElement;
+canvas.id = "gameCanvas";
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// === HELPER FUNCTIONS ===
-// --- Asset Loading ---
-async function loadImages(urls: string[]): Promise<HTMLImageElement[]> {
-  const promises = urls.map((url) => {
-    return new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
-      img.src = url;
+document.body.appendChild(canvas);
+
+async function bootstrap() {
+  try {
+    BlockRegistry.initialize();
+    const gpu = await initWebGPU(canvas);
+    const input = new Input(canvas);
+    const camera = new FPCamera(canvas.width / canvas.height);
+    const renderer = new Renderer(gpu, canvas.width, canvas.height);
+    const ui = new UI(canvas);
+    const gameTime = new GameTime();
+
+    await renderer.textureAtlas.buildAtlas(
+      BlockRegistry.getAllBlocks(),
+      renderer.pipeline,
+    );
+    BlockRegistry.linkTextures(renderer.textureAtlas.textureMap);
+
+    const chunkManager = new ChunkManager(renderer);
+    chunkManager.requestChunk(0, 0);
+
+    const fovSlider = document.getElementById("fov-slider") as HTMLInputElement;
+    const fovVal = document.getElementById("fov-val") as HTMLSpanElement;
+    fovSlider.addEventListener("input", (e) => {
+      const val = (e.target as HTMLInputElement).value;
+      fovVal.innerText = `${val}°`;
+      mat4.perspective(
+        camera.projectionMatrix,
+        (parseInt(val) * Math.PI) / 180,
+        canvas.width / canvas.height,
+        0.1,
+        1000,
+      );
     });
-  });
-  return Promise.all(promises);
-}
 
-async function initGame() {
-  const timeManager = new TimeManager();
-  const inputManager = new InputManager(canvas);
-  const uiManager = new UIManager(canvas, inputManager, timeManager);
+    const rdSlider = document.getElementById("rd-slider") as HTMLInputElement;
+    const rdVal = document.getElementById("rd-val") as HTMLSpanElement;
+    rdSlider.addEventListener("input", (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value);
+      rdVal.innerText = val.toString();
+      chunkManager.renderDistance = val;
+    });
 
-  // === RENDERER ===
-  let renderer: IRenderer;
-  const gpuRenderer = new WebGPURenderer(canvas);
+    const speedSlider = document.getElementById(
+      "speed-slider",
+    ) as HTMLInputElement;
+    const speedVal = document.getElementById("speed-val") as HTMLSpanElement;
+    speedSlider.addEventListener("input", (e) => {
+      const val = parseFloat((e.target as HTMLInputElement).value);
+      gameTime.timeSpeed = val;
+      speedVal.innerText = `${val.toFixed(1)}x`;
+    });
 
-  const isWebGPUSupported = await gpuRenderer.initialize();
+    const btnToggleTime = document.getElementById(
+      "btn-toggle-time",
+    ) as HTMLButtonElement;
+    btnToggleTime.addEventListener("click", () => {
+      gameTime.isPaused = !gameTime.isPaused;
+      btnToggleTime.innerText = gameTime.isPaused
+        ? "Resume Time"
+        : "Pause Time";
+    });
 
-  if (isWebGPUSupported) {
-    renderer = gpuRenderer;
-  } else {
-    console.log("Falling back to WebGL2 Renderer.");
-    renderer = new WebGLRenderer(canvas);
-  }
-  // === CAMERA ===
-  const projection = Mat4.create();
+    document.getElementById("btn-set-noon")?.addEventListener("click", () => {
+      gameTime.timeOfDay = 0.5;
+    });
 
-  Mat4.perspective(
-    projection,
-    Math.PI / 4,
-    canvas.width / canvas.height,
-    0.1,
-    1000.0,
-  );
+    camera.position[0] = 8;
+    camera.position[1] = 45;
+    camera.position[2] = 25;
 
-  // === RESIZE ===
-  window.addEventListener("resize", () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    Mat4.perspective(
-      projection,
-      Math.PI / 4,
-      canvas.width / canvas.height,
-      0.1,
-      1000.0,
-    );
-  });
+    window.addEventListener("resize", () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      camera.updateProjection(canvas.width / canvas.height);
+      renderer.resizeDepthTexture(canvas.width, canvas.height);
 
-  // === ASSETS ===
-  console.log("Fetching and compiling assets...");
-  const assetResponse = await fetch("assets.json");
-  const rawAssets = await assetResponse.json();
+      const fov = (parseInt(fovSlider.value) * Math.PI) / 180;
+      mat4.perspective(
+        camera.projectionMatrix,
+        fov,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000,
+      );
+    });
 
-  const compiledAssets = await compileRegistry(rawAssets);
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+    let currentFps = 0;
 
-  const images = await loadImages(compiledAssets.textureList);
-  console.log("Textures loaded");
-
-  renderer.createTextureArrayFromImage(images, 16);
-
-  // === BLOCK REGISTRY SETUP ===
-  const BLOCKS: BlockIdMap = { AIR: 0 };
-  const BLOCK_DATA: Record<number, any> = { 0: null };
-  const BLOCK_ICONS: Record<number, string> = { 0: "" };
-
-  for (const [blockName, id] of Object.entries(compiledAssets.blockIds)) {
-    BLOCKS[blockName.toUpperCase()] = id;
-  }
-
-  for (const [blockName, config] of Object.entries(
-    compiledAssets.blockRegistry,
-  )) {
-    BLOCK_DATA[config.id] = config;
-    BLOCK_ICONS[config.id] = rawAssets.blocks[blockName].icon;
-  }
-
-  // Precompute highlight layer index for quick access in rendering
-  const highlightLayerIndex = compiledAssets.textureList.indexOf(
-    rawAssets.system.highlightLayer,
-  );
-
-  const chunkManager = new ChunkManager(renderer, BLOCK_DATA);
-  chunkManager.BLOCKS = BLOCKS;
-  chunkManager.worker.postMessage({
-    type: "init",
-    blocks: BLOCKS,
-    blockRegistry: BLOCK_DATA,
-  });
-  const player = new Player(canvas, inputManager, BLOCKS, BLOCK_ICONS);
-
-  canvas.addEventListener("click", () => {
-    if (!uiManager.isGamePaused && !player.inventoryManager.isOpen) {
-      canvas.requestPointerLock();
-    }
-  });
-
-  // === ENTITY ===
-  const cowModelData = Entity.getModelData();
-  const cowMesh = renderer.createEntityMesh(
-    cowModelData.vertices,
-    cowModelData.indices,
-  );
-
-  // 5. Main Render Loop
-  function animate() {
-    requestAnimationFrame(animate);
-
-    timeManager.update(
-      uiManager.isGamePaused,
-      (tickRate) => {
-        for (const cow of chunkManager.entities) {
-          cow.update(tickRate, chunkManager);
-        }
-      },
-      (deltaTime, timeScale) => {
-        const pos = player.camera.getCameraPosition();
-        chunkManager.update(pos[0], pos[2]);
-
-        player.update(chunkManager, timeScale, inputManager);
-      },
-    );
-
-    const gameTime = timeManager.gameTime;
-    const fps = timeManager.fps;
-
-    const view = player.camera.getViewMatrix();
-    const cameraOrigin = player.camera.getCameraPosition();
-
-    chunkManager.renderDistance = uiManager.renderDistance;
-    timeManager.timeSpeed = uiManager.timeSpeed;
-
-    uiManager.renderDebug(
-      cameraOrigin,
-      fps,
-      chunkManager.chunks.size,
-      chunkManager.entities.length,
-      player.targetedEntity ? `COW [HP: ${player.targetedEntity.hp}]` : "None",
-    );
-
-    const sunDirection: [number, number, number] = [
-      Math.sin(gameTime),
-      Math.cos(gameTime),
-      0.5,
-    ];
-
-    const { solid, trans } = chunkManager.getVisibleMeshes(
-      player.camera.getCameraPosition(),
-      player.camera.yaw,
-    );
-
-    let isHoldingTorch = 0;
-    const heldBlockId = player.inventoryManager.getActiveBlock();
-    const heldBlockData = BLOCK_DATA[heldBlockId];
-    if (heldBlockData && heldBlockData.light) {
-      isHoldingTorch = heldBlockData.light / 15.0;
-    }
-
-    let skyColor: [number, number, number] = [0.53, 0.81, 0.92];
-
-    renderer.beginFrame(projection, view, skyColor);
-
-    renderer.drawSkybox(projection, view, sunDirection);
-
-    renderer.drawWorld(
-      projection,
-      view,
-      solid,
-      trans,
-      sunDirection,
-      cameraOrigin,
-      isHoldingTorch,
-      performance.now() * 0.001,
-      player.camera.isSubmerged,
-    );
-
-    for (let i = chunkManager.entities.length - 1; i >= 0; i--) {
-      const cow = chunkManager.entities[i];
-      if (cow.hp <= 0) {
-        chunkManager.entities.splice(i, 1);
-        continue;
+    function fixedUpdate(dt: number) {
+      if (ui.isPaused) {
+        input.resetPerFrame();
+        return;
       }
 
-      const flash = cow.damageFlashTimer > 0 ? 0.7 : 0.0;
+      gameTime.update(dt);
 
-      renderer.drawEntity(
-        cowMesh,
-        cow.getModelMatrix(),
-        sunDirection,
-        50,
-        cow.isMoving,
-        flash,
-      );
+      camera.update(dt, input, chunkManager.store);
+      chunkManager.update(camera);
+
+      if ((input.leftClick || input.rightClick) && input.isPointerLocked) {
+        const lookDir = new Float32Array([
+          Math.cos(camera.pitch) * Math.cos(camera.yaw),
+          Math.sin(camera.pitch),
+          Math.cos(camera.pitch) * Math.sin(camera.yaw),
+        ]);
+
+        const eyePos = new Float32Array([
+          camera.position[0],
+          camera.position[1] + 1.6,
+          camera.position[2],
+        ]);
+
+        const hitResult = Raycaster.step(
+          eyePos,
+          lookDir,
+          6.0,
+          chunkManager.store,
+        );
+
+        if (hitResult.hit) {
+          // Determine which action to take based on the UI toggle
+          const isBreak = ui.invertMouse ? input.rightClick : input.leftClick;
+          const isPlace = ui.invertMouse ? input.leftClick : input.rightClick;
+
+          if (isBreak) {
+            chunkManager.setBlock(
+              hitResult.blockPos[0],
+              hitResult.blockPos[1],
+              hitResult.blockPos[2],
+              0,
+            );
+          } else if (isPlace) {
+            const placeX = hitResult.blockPos[0] + hitResult.normal[0];
+            const placeY = hitResult.blockPos[1] + hitResult.normal[1];
+            const placeZ = hitResult.blockPos[2] + hitResult.normal[2];
+
+            const blockToPlace = ui.getActiveBlockId();
+            if (blockToPlace !== 0) {
+              chunkManager.setBlock(placeX, placeY, placeZ, blockToPlace);
+            }
+          }
+        }
+      }
+
+      input.resetPerFrame();
     }
 
-    if (player.activeHit) {
-      renderer.drawHighlight(
-        projection,
-        view,
-        player.activeHit.x,
-        player.activeHit.y,
-        player.activeHit.z,
-        player.activeHit.normal,
-        highlightLayerIndex,
+    // Render Tick
+    function render() {
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        currentFps = frameCount;
+        frameCount = 0;
+        lastFpsTime = now;
+      }
+
+      ui.updateDebugHUD(
+        currentFps,
+        camera.position[0],
+        camera.position[1],
+        camera.position[2],
+        chunkManager.loadedChunks.size,
       );
+
+      chunkManager.draw(camera, engineTime.elapsedTime, gameTime);
     }
 
-    if (inputManager.showEntityRay && player.nearestEntity) {
-      renderer.drawLine(
-        cameraOrigin[0],
-        cameraOrigin[1],
-        cameraOrigin[2],
-        player.nearestEntity.x,
-        player.nearestEntity.y,
-        player.nearestEntity.z,
-        1.0,
-        0.0,
-        0.0,
-        projection,
-        view,
-      );
-    }
+    const engineTime = new Time(fixedUpdate, render);
+    engineTime.start();
 
-    renderer.endFrame();
+    console.log("ENGINE STARTING IN 3.. 2... 1.. VROOOOOOMM!!!!🚀");
+  } catch (error) {
+    console.error("Error:", error);
   }
-
-  animate();
 }
 
-initGame();
+bootstrap();

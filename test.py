@@ -1,58 +1,54 @@
 from PIL import Image
+import os
 
-def tint_minecraft_grass(image_path, output_path, tint_rgb=(145, 189, 89)):
+def apply_minecraft_water_tint(input_filename, output_filename, hex_tint="#3F76E4"):
     """
-    Tints a grayscale Minecraft grass texture into a specific biome color 
-    while perfectly preserving the alpha transparency.
+    Applies the default Minecraft biome tint to a grayscale water spritesheet.
     """
-    r_tint, g_tint, b_tint = tint_rgb
-    print(f"Applying Grass Tint (RGB): {r_tint}, {g_tint}, {b_tint}")
-
-    try:
-        # Open the image and ensure it has an Alpha channel (RGBA)
-        img = Image.open(image_path).convert("RGBA")
-    except FileNotFoundError:
-        print(f"Error: Could not find '{image_path}'.")
+    if not os.path.exists(input_filename):
+        print(f"Error: Could not find '{input_filename}'. Please ensure it is in the same directory.")
         return
 
-    # Create a new image for the tinted output
-    tinted_img = Image.new("RGBA", img.size)
+    # 1. Parse the target Hex color into RGB integers
+    hex_tint = hex_tint.lstrip('#')
+    tint_r, tint_g, tint_b = tuple(int(hex_tint[i:i+2], 16) for i in (0, 2, 4))
+
+    # 2. Open the image and convert to RGBA to preserve transparency
+    try:
+        img = Image.open(input_filename).convert("RGBA")
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        return
+
     pixels = img.load()
-    tinted_pixels = tinted_img.load()
+    width, height = img.size
 
-    # Apply the Multiply Blend Mode
-    for y in range(img.height):
-        for x in range(img.width):
+    # 3. Process each pixel
+    for y in range(height):
+        for x in range(width):
             r, g, b, a = pixels[x, y]
-            
-            # If the pixel is fully transparent, skip the math and just copy it
-            if a == 0:
-                tinted_pixels[x, y] = (0, 0, 0, 0)
-                continue
-            
-            # Multiply the grayscale base by the normalized tint color
-            # We use 'r' as the baseline since it's a grayscale image (r = g = b)
-            new_r = int(r * (r_tint / 255.0))
-            new_g = int(g * (g_tint / 255.0))
-            new_b = int(b * (b_tint / 255.0))
-            
-            # Write the new color to the output image, preserving the alpha
-            tinted_pixels[x, y] = (new_r, new_g, new_b, a)
 
-    # Save the final tinted texture
-    tinted_img.save(output_path)
-    print(f"Success! Saved tinted grass texture to {output_path}")
+            # Skip fully transparent pixels to save processing time
+            if a > 0:
+                # Since the source is grayscale, R = G = B. 
+                # We normalize the intensity to a float between 0.0 and 1.0.
+                intensity = r / 255.0
+
+                # Multiply the intensity by the specific biome tint
+                new_r = int(intensity * tint_r)
+                new_g = int(intensity * tint_g)
+                new_b = int(intensity * tint_b)
+
+                # Reassign the newly calculated pixel
+                pixels[x, y] = (new_r, new_g, new_b, a)
+
+    # 4. Save the result
+    img.save(output_filename)
+    print(f"Success! Tinted spritesheet saved as: {output_filename}")
 
 if __name__ == "__main__":
-    # Your uploaded filename
-    INPUT_IMAGE = "grass.png" 
-    OUTPUT_IMAGE = "image.png"
+    # Place your 'water_still.png' in the same folder as this script
+    INPUT_FILE = "water_still.png"
+    OUTPUT_FILE = "water_still_colored.png"
     
-    # Biome Color Guide:
-    # Plains: (145, 189, 89)
-    # Forest: (121, 192, 90)
-    # Jungle: (89, 201, 60)
-    # Savanna: (191, 183, 85)
-    
-    # Running with the default Plains biome green
-    tint_minecraft_grass(INPUT_IMAGE, OUTPUT_IMAGE)
+    apply_minecraft_water_tint(INPUT_FILE, OUTPUT_FILE)
