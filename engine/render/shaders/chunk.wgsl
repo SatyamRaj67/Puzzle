@@ -1,8 +1,11 @@
 struct GlobalUniform {
-    viewProj: mat4x4<f32>,     
+    viewProj: mat4x4<f32>,
     sunDir: vec3<f32>,
-    timeOfDay: f32,            
-    time: f32,                 
+    timeOfDay: f32,
+    time: f32,
+    cameraPosX: f32,
+    cameraPosY: f32,
+    cameraPosZ: f32,
 };
 
 struct FaceUnifrom {
@@ -38,30 +41,28 @@ struct VertexOutput{
     @location(3) sky_tint: vec3<f32>,
 }
 
-var<private> cube_corners: array<vec3<f32>, 36> = array<vec3<f32>, 36>(
-    // Face 0: Z+ (Front) - W maps to X, H maps to Y
-    vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 1.0),
-    vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 1.0, 1.0),
-
-    // Face 1: Z- (Back) - W maps to X, H maps to Y
-    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0),
-    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 1.0, 0.0),
-
-    // Face 2: Y+ (Top) - W maps to X, H maps to Z
-    vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 0.0),
-    vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0),
-
-    // Face 3: Y- (Bottom) - W maps to X, H maps to Z
-    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 1.0),
-    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, 1.0),
-
-    // Face 4: X+ (Right) - W maps to Z, H maps to Y
-    vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 0.0),
-    vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(1.0, 1.0, 1.0),
-
-    // Face 5: X- (Left) - W maps to Z, H maps to Y
-    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(0.0, 1.0, 1.0),
-    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(0.0, 1.0, 0.0)
+var<private> cube_corners: array<vec3<f32>, 60> = array<vec3<f32>, 60>(
+    // 0: Z+ (Front)
+    vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 1.0, 1.0),
+    // 1: Z- (Back)
+    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 1.0, 0.0),
+    // 2: Y+ (Top)
+    vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0),
+    // 3: Y- (Bottom)
+    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, 1.0),
+    // 4: X+ (Right)
+    vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(1.0, 1.0, 1.0),
+    // 5: X- (Left)
+    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(0.0, 1.0, 0.0),
+    
+    // 6: Diagonal 1 (Front)
+    vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 1.0, 0.0),
+    // 7: Diagonal 1 (Back - Flipped Winding)
+    vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 1.0, 1.0),
+    // 8: Diagonal 2 (Front)
+    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 1.0), vec3<f32>(1.0, 1.0, 0.0),
+    // 9: Diagonal 2 (Back - Flipped Winding)
+    vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 1.0)
 );
 
 var<private> quad_uvs: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
@@ -69,19 +70,26 @@ var<private> quad_uvs: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
     vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 0.0)
 );
 
-var<private> face_shading: array<f32, 6> = array<f32, 6>(
+var<private> face_shading: array<f32, 10> = array<f32, 10>(
     0.8, // Front
     0.8, // Back
     1.0, // Top (Brightest)
     0.5, // Bottom (Darkest)
     0.6, // Right
-    0.6  // Left
+    0.6,  // Left
+    1.0,
+    1.0,
+    1.0,
+    1.0
 );
 
-var<private> face_normals: array<vec3<f32>, 6> = array<vec3<f32>, 6>(
+var<private> face_normals: array<vec3<f32>, 10> = array<vec3<f32>, 10>(
     vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(0.0, 0.0, -1.0),
     vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, -1.0, 0.0),
-    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(-1.0, 0.0, 0.0)
+    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(-1.0, 0.0, 0.0),
+
+    vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), 
+    vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 1.0, 0.0)
 );
 
 @vertex
@@ -104,15 +112,12 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     let corner_index = (face_dir * 6u) + (model.vertex_index % 6u);
     var corner_offset = cube_corners[corner_index];
 
-    if (face_dir == 0u || face_dir == 1u) { // Z+ / Z-
-        corner_offset.x *= w;
-        corner_offset.y *= h;
-    } else if (face_dir == 2u || face_dir == 3u) { // Y+ / Y-
-        corner_offset.x *= w;
-        corner_offset.z *= h;
-    } else if (face_dir == 4u || face_dir == 5u) { // X+ / X-
-        corner_offset.z *= w;
-        corner_offset.y *= h;
+    if (face_dir == 0u || face_dir == 1u) { 
+        corner_offset.x *= w; corner_offset.y *= h; 
+    } else if (face_dir == 2u || face_dir == 3u) {
+        corner_offset.x *= w; corner_offset.z *= h; 
+    } else if (face_dir == 4u || face_dir == 5u) { 
+        corner_offset.z *= w; corner_offset.y *= h; 
     }
 
     let world_pos = vec3<f32>(
@@ -141,7 +146,7 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     let sun_dir = normalize(globals.sunDir);
     let direct_light = max(dot(normal, sun_dir), 0.0);
 
-    let ambient_light = max(sun_dir.y * 0.5 + 0.1, 0.05);
+    let ambient_light = max(sun_dir.y * 0.5 + 0.1, 0.2);
     let total_illumination = ambient_light + (direct_light * 0.6);
 
    out.shade = face_shading[face_dir] * ao_multiplier * total_illumination;

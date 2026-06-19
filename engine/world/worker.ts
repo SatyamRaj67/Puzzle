@@ -27,7 +27,7 @@ self.onmessage = (event: MessageEvent) => {
     const transferList: ArrayBuffer[] = [];
     const buffersToSend: ArrayBuffer[] = [];
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const buffer = meshData.vertices[i].buffer as ArrayBuffer;
       buffersToSend.push(buffer);
       if (meshData.vertexCounts[i] > 0) {

@@ -11,10 +11,91 @@ export class GreedyMesher {
     chunkX: number,
     chunkZ: number,
   ): ChunkMesh {
-    const faces: number[][] = [[], [], [], [], [], []];
+    const faces: number[][] = [[], [], [], [], [], [], [], [], [], []];
 
     const startX = chunkX * Chunk.WIDTH;
     const startZ = chunkZ * Chunk.DEPTH;
+
+    // --- FLORA PASS ---
+    for (let y = 0; y < Chunk.HEIGHT; y++) {
+      for (let x = 0; x < Chunk.WIDTH; x++) {
+        for (let z = 0; z < Chunk.DEPTH; z++) {
+          const wx = startX + x;
+          const wz = startZ + z;
+          const blockId = store.getBlock(wx, y, wz);
+
+          if (blockId !== 0) {
+            const def = BlockRegistry.getBlock(blockId);
+            if (def.renderType === "CROSS") {
+              const tex_d1 = def.textureIds[0];
+              const tex_d2 = def.textureIds[1] ?? tex_d1; // Fallback to d1 if no d2 exists
+
+              const data1_d1 = Format.packData1(x, y, z, tex_d1, 1, 1);
+              const data1_d2 = Format.packData1(x, y, z, tex_d2, 1, 1);
+              const data2 = Format.packData2(0, chunkX, chunkZ); // AO is 0 for plants
+
+              // Push 6 vertices per face
+              faces[6].push(
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+              );
+              faces[7].push(
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+                data1_d1,
+                data2,
+              );
+              faces[8].push(
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+              );
+              faces[9].push(
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+                data1_d2,
+                data2,
+              );
+            }
+          }
+        }
+      }
+    }
 
     // --- Z AXIS (Faces 0: Z+, 1: Z-) ---
     // Slice = Z. Plane = X (u) and Y (v)
@@ -29,7 +110,7 @@ export class GreedyMesher {
           const wx = startX + x;
           const blockId = store.getBlock(wx, wy, wz);
 
-          if (blockId !== 0) {
+          if (blockId !== 0 && BlockRegistry.getBlock(blockId).renderType !== 'CROSS') {
             const neighborZPlus = store.getBlock(wx, wy, wz + 1);
             if (BlockRegistry.shouldRenderFace(blockId, neighborZPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 0);
@@ -80,7 +161,7 @@ export class GreedyMesher {
           const wx = startX + x;
           const blockId = store.getBlock(wx, wy, wz);
 
-          if (blockId !== 0) {
+          if (blockId !== 0 && BlockRegistry.getBlock(blockId).renderType !== 'CROSS') {
             const neighborYPlus = store.getBlock(wx, wy + 1, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborYPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 2);
@@ -131,7 +212,7 @@ export class GreedyMesher {
           const wz = startZ + z;
           const blockId = store.getBlock(wx, wy, wz);
 
-          if (blockId !== 0) {
+          if (blockId !== 0 && BlockRegistry.getBlock(blockId).renderType !== 'CROSS') {
             const neighborXPlus = store.getBlock(wx + 1, wy, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborXPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 4);

@@ -52,7 +52,7 @@ export class ChunkManager {
         };
 
         const buffers: GPUBuffer[] = [];
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 10; i++) {
           if (chunkMesh.vertexCounts[i] > 0) {
             buffers[i] = this.renderer.createVertexBuffer(
               chunkMesh.vertices[i],

@@ -2,6 +2,7 @@ import type { GPUState } from "../gpu/device";
 import type { GameTime } from "../world/gameTime";
 import type { FPCamera } from "./camera/fpCamera";
 import { createChunkPipeline } from "./pipelines/chunkPipeline";
+import { createSkyPipeline } from "./pipelines/skyPipeline";
 import { TextureAtlas } from "./texture";
 
 export class Renderer {
@@ -9,6 +10,9 @@ export class Renderer {
   public pipeline: GPURenderPipeline;
   private cameraBuffer: GPUBuffer;
   private bindGroup: GPUBindGroup;
+
+  public skyPipeline: GPURenderPipeline;
+  private skyVBO: GPUBuffer;
 
   private faceUniformBuffers: GPUBuffer[] = [];
   private faceBindGroups: GPUBindGroup[] = [];
@@ -32,7 +36,7 @@ export class Renderer {
 
     this.pipeline = createChunkPipeline(gpu);
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const buffer = gpu.device.createBuffer({
         size: 16,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -67,6 +71,24 @@ export class Renderer {
         },
       ],
     });
+
+    // === SKY PIPELINE ===
+    this.skyPipeline = createSkyPipeline(gpu);
+
+    const vData = new Float32Array([
+      -1,1,-1, -1,-1,-1, 1,-1,-1, -1,1,-1, 1,-1,-1, 1,1,-1, // Front
+      1,1,1, 1,-1,1, -1,-1,1, 1,1,1, -1,-1,1, -1,1,1, // Back
+      -1,1,1, -1,-1,1, -1,-1,-1, -1,1,1, -1,-1,-1, -1,1,-1, // Left
+      1,1,-1, 1,-1,-1, 1,-1,1, 1,1,-1, 1,-1,1, 1,1,1, // Right
+      -1,1,1, -1,1,-1, 1,1,-1, -1,1,1, 1,1,-1, 1,1,1, // Top
+      -1,-1,-1, -1,-1,1, 1,-1,1, -1,-1,-1, 1,-1,1, 1,-1,-1  // Bottom
+    ]);
+
+    this.skyVBO = this.gpu.device.createBuffer({
+      size: vData.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    this.gpu.device.queue.writeBuffer(this.skyVBO, 0, vData);
   }
 
   public resizeDepthTexture(width: number, height: number) {
@@ -142,14 +164,25 @@ export class Renderer {
       },
     });
 
-    renderPass.setPipeline(this.pipeline);
+    // Draw Sky
+    renderPass.setPipeline(this.skyPipeline);
     renderPass.setBindGroup(0, this.bindGroup);
+
+    if (this.textureAtlas.bindGroup) {
+        renderPass.setBindGroup(1, this.textureAtlas.bindGroup);
+    }
+
+    renderPass.setVertexBuffer(0, this.skyVBO);
+    renderPass.draw(36);
+
+    // Draw Chunks
+    renderPass.setPipeline(this.pipeline);
 
     if (this.textureAtlas.bindGroup) {
       renderPass.setBindGroup(1, this.textureAtlas.bindGroup);
 
       for (const chunk of chunks) {
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 10; i++) {
           if (chunk.mesh.vertexCounts[i] > 0 && chunk.buffers[i]) {
             renderPass.setBindGroup(2, this.faceBindGroups[i]);
             renderPass.setVertexBuffer(0, chunk.buffers[i]);
