@@ -359,11 +359,11 @@ export class Renderer {
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(this.cullPipeline);
     const workgroups = Math.ceil(chunks.length / 64);
-    
+
     // Dispatch Opaque
     computePass.setBindGroup(0, this.opaqueComputeBindGroup);
     computePass.dispatchWorkgroups(workgroups);
-    
+
     // Dispatch Translucent
     computePass.setBindGroup(0, this.transComputeBindGroup);
     computePass.dispatchWorkgroups(workgroups);
@@ -407,13 +407,15 @@ export class Renderer {
     renderPass.setPipeline(this.pipeline);
     if (this.textureAtlas.bindGroup) {
       renderPass.setVertexBuffer(0, this.opaqueArena.buffer);
-      for (let i = 0; i < chunks.length; i++) renderPass.drawIndirect(this.opaqueIndirectBuffer, i * 16);
+      for (let i = 0; i < chunks.length; i++)
+        renderPass.drawIndirect(this.opaqueIndirectBuffer, i * 16);
     }
 
     renderPass.setPipeline(this.translucentPipeline);
     if (this.textureAtlas.bindGroup) {
       renderPass.setVertexBuffer(0, this.translucentArena.buffer);
-      for (let i = 0; i < chunks.length; i++) renderPass.drawIndirect(this.transIndirectBuffer, i * 16);
+      for (let i = 0; i < chunks.length; i++)
+        renderPass.drawIndirect(this.transIndirectBuffer, i * 16);
     }
 
     renderPass.end();

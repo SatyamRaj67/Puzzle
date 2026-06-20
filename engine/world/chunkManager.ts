@@ -16,13 +16,21 @@ export class ChunkManager {
   private worker: Worker;
   private renderer: Renderer;
 
+  public store = new ChunkStore();
   public loadedChunks: Map<string, LoadedChunk> = new Map();
-
   private pendingGenerations = 0;
 
-  public renderDistance: number = 4; // Generates 9x9 grid
+  public renderDistance: number = 32; // Generates 9x9 grid
+  private unloadRadius: number = this.renderDistance + 4;
 
-  public store = new ChunkStore();
+  private lastPlayerChunkX: number | null = null;
+  private lastPlayerChunkZ: number | null = null;
+  private loadQueue: {
+    x: number;
+    z: number;
+    distSq: number;
+  }[] = [];
+
   constructor(renderer: Renderer) {
     this.renderer = renderer;
     this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
@@ -127,11 +135,8 @@ export class ChunkManager {
     }
   }
 
-  public update(camera: FPCamera) {
-    const playerChunkX = Math.floor(camera.position[0] / 16);
-    const playerChunkZ = Math.floor(camera.position[2] / 16);
-
-    const loadQueue: { x: number; z: number; distSq: number }[] = [];
+  private rebuildLoadQueue(playerChunkX: number, playerChunkZ: number) {
+    this.loadQueue = [];
 
     for (let x = -this.renderDistance; x <= this.renderDistance; x++) {
       for (let z = -this.renderDistance; z <= this.renderDistance; z++) {
@@ -141,35 +146,21 @@ export class ChunkManager {
 
         if (!this.loadedChunks.has(key)) {
           const distSq = x * x + z * z;
-          loadQueue.push({ x: cx, z: cz, distSq });
+          this.loadQueue.push({ x: cx, z: cz, distSq });
         }
       }
     }
 
-    loadQueue.sort((a, b) => a.distSq - b.distSq);
-
-    if (this.pendingGenerations < 2 && loadQueue.length > 0) {
-      const chunksToLoadThisFrame = Math.min(
-        loadQueue.length,
-        2 - this.pendingGenerations,
-      );
-      for (let i = 0; i < chunksToLoadThisFrame; i++) {
-        const { x, z } = loadQueue[i];
-        this.loadedChunks.set(`${x},${z}`, null as any);
-
-        this.pendingGenerations++;
-        this.worker.postMessage({ type: "GENERATE", chunkX: x, chunkZ: z });
-      }
-    }
+    this.loadQueue.sort((a, b) => a.distSq - b.distSq);
 
     for (const [key, chunk] of this.loadedChunks.entries()) {
       if (!chunk) continue;
+
       const dx = Math.abs(chunk.x - playerChunkX);
       const dz = Math.abs(chunk.z - playerChunkZ);
 
-      if (dx > this.renderDistance + 1 || dz > this.renderDistance + 1) {
+      if (dx > this.unloadRadius || dz > this.unloadRadius) {
         this.freeChunkMemory(chunk);
-
         this.loadedChunks.delete(key);
         this.store.unloadChunk(chunk.x, chunk.z);
         this.worker.postMessage({
@@ -177,6 +168,43 @@ export class ChunkManager {
           chunkX: chunk.x,
           chunkZ: chunk.z,
         });
+      }
+    }
+  }
+
+  public update(camera: FPCamera) {
+    const playerChunkX = Math.floor(camera.position[0] / 16);
+    const playerChunkZ = Math.floor(camera.position[2] / 16);
+
+    if (
+      this.lastPlayerChunkX !== playerChunkX ||
+      this.lastPlayerChunkZ !== playerChunkZ
+    ) {
+      this.lastPlayerChunkX = playerChunkX;
+      this.lastPlayerChunkZ = playerChunkZ;
+      this.rebuildLoadQueue(playerChunkX, playerChunkZ);
+    }
+
+    if (this.pendingGenerations < 2 && this.loadQueue.length > 0) {
+      const chunksToLoadThisFrame = Math.min(
+        this.loadQueue.length,
+        2 - this.pendingGenerations,
+      );
+
+      for (let i = 0; i < chunksToLoadThisFrame; i++) {
+        const target = this.loadQueue.shift();
+        if (!target) continue;
+
+        const key = `${target.x},${target.z}`;
+        if (!this.loadedChunks.has(key)) {
+          this.loadedChunks.set(key, null as any); // Mark as pending
+          this.pendingGenerations++;
+          this.worker.postMessage({
+            type: "GENERATE",
+            chunkX: target.x,
+            chunkZ: target.z,
+          });
+        }
       }
     }
   }
@@ -191,7 +219,7 @@ export class ChunkManager {
 
     for (const chunk of this.loadedChunks.values()) {
       if (!chunk) continue;
-        visibleChunks.push(chunk);
+      visibleChunks.push(chunk);
     }
     this.renderer.drawMultiple(
       camera,
