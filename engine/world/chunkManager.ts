@@ -1,6 +1,5 @@
 import type { ChunkMesh } from "../mesher/types";
 import type { FPCamera } from "../render/camera/fpCamera";
-import { Frustrum } from "../render/culling";
 import type { Renderer } from "../render/renderer";
 import { ChunkStore } from "./chunkStore";
 import type { GameTime } from "./gameTime";
@@ -9,17 +8,19 @@ export interface LoadedChunk {
   x: number;
   z: number;
   mesh: ChunkMesh;
-  buffers: GPUBuffer[];
+  opaqueOffset: number | null;
+  translucentOffset: number | null;
 }
 
 export class ChunkManager {
   private worker: Worker;
   private renderer: Renderer;
-  
+
   public loadedChunks: Map<string, LoadedChunk> = new Map();
 
+  private pendingGenerations = 0;
+
   public renderDistance: number = 4; // Generates 9x9 grid
-  public frustum = new Frustrum();
 
   public store = new ChunkStore();
   constructor(renderer: Renderer) {
@@ -37,37 +38,93 @@ export class ChunkManager {
       const data = event.data;
 
       if (data.type === "DONE") {
+        if (data.isGenerate) this.pendingGenerations--;
 
         if (data.chunkData) {
           this.store.setChunkData(data.chunkX, data.chunkZ, data.chunkData);
         }
 
-        const typedVertices = data.vertices.map(
-          (buf: ArrayBuffer) => new Uint32Array(buf),
-        );
-
-        const chunkMesh: ChunkMesh = {
-          vertices: typedVertices,
-          vertexCounts: data.vertexCounts,
-        };
-
-        const buffers: GPUBuffer[] = [];
-        for (let i = 0; i < 16; i++) {
-          if (chunkMesh.vertexCounts[i] > 0) {
-            buffers[i] = this.renderer.createVertexBuffer(
-              chunkMesh.vertices[i],
-            );
-          }
+        let opaqueVertexCount = 0;
+        for (let i = 0; i < 10; i++) {
+          opaqueVertexCount += data.vertexCounts[i];
         }
 
-        this.loadedChunks.set(`${data.chunkX},${data.chunkZ}`, {
+        let opaqueOffset: number | null = null;
+        if (opaqueVertexCount > 0) {
+          const opaqueData = new Uint32Array(opaqueVertexCount * 3);
+          let ptr = 0;
+
+          for (let i = 0; i < 10; i++) {
+            const faceData = new Uint32Array(data.vertices[i]);
+            opaqueData.set(faceData, ptr);
+            ptr += faceData.length;
+          }
+
+          opaqueOffset = this.renderer.opaqueArena.allocate(
+            opaqueData.byteLength,
+          );
+          this.renderer.gpu.device.queue.writeBuffer(
+            this.renderer.opaqueArena.buffer,
+            opaqueOffset,
+            opaqueData,
+          );
+        }
+
+        let transVertexCount = 0;
+        for (let i = 10; i < 16; i++) {
+          transVertexCount += data.vertexCounts[i];
+        }
+
+        let translucentOffset: number | null = null;
+        if (transVertexCount > 0) {
+          const transData = new Uint32Array(transVertexCount * 3);
+          let ptr = 0;
+
+          for (let i = 10; i < 16; i++) {
+            const faceData = new Uint32Array(data.vertices[i]);
+            transData.set(faceData, ptr);
+            ptr += faceData.length;
+          }
+
+          translucentOffset = this.renderer.translucentArena.allocate(
+            transData.byteLength,
+          );
+          this.renderer.gpu.device.queue.writeBuffer(
+            this.renderer.translucentArena.buffer,
+            translucentOffset,
+            transData,
+          );
+        }
+
+        const key = `${data.chunkX},${data.chunkZ}`;
+        const existing = this.loadedChunks.get(key);
+        if (existing) this.freeChunkMemory(existing);
+
+        const chunkMesh: ChunkMesh = {
+          vertices: [],
+          vertexCounts: [opaqueVertexCount, transVertexCount],
+        };
+
+        this.loadedChunks.set(key, {
           x: data.chunkX,
           z: data.chunkZ,
           mesh: chunkMesh,
-          buffers,
+          opaqueOffset,
+          translucentOffset,
         });
       }
     };
+  }
+
+  private freeChunkMemory(chunk: LoadedChunk) {
+    if (chunk.opaqueOffset !== null) {
+      const bytes = chunk.mesh.vertexCounts[0] * 3 * 4;
+      this.renderer.opaqueArena.free(chunk.opaqueOffset, bytes);
+    }
+    if (chunk.translucentOffset !== null) {
+      const bytes = chunk.mesh.vertexCounts[1] * 3 * 4;
+      this.renderer.translucentArena.free(chunk.translucentOffset, bytes);
+    }
   }
 
   public update(camera: FPCamera) {
@@ -91,11 +148,18 @@ export class ChunkManager {
 
     loadQueue.sort((a, b) => a.distSq - b.distSq);
 
-    const chunksToLoadThisFrame = Math.min(loadQueue.length, 4);
-    for (let i = 0; i < chunksToLoadThisFrame; i++) {
-      const { x, z } = loadQueue[i];
-      this.loadedChunks.set(`${x},${z}`, null as any);
-      this.worker.postMessage({ type: "GENERATE", chunkX: x, chunkZ: z });
+    if (this.pendingGenerations < 2 && loadQueue.length > 0) {
+      const chunksToLoadThisFrame = Math.min(
+        loadQueue.length,
+        2 - this.pendingGenerations,
+      );
+      for (let i = 0; i < chunksToLoadThisFrame; i++) {
+        const { x, z } = loadQueue[i];
+        this.loadedChunks.set(`${x},${z}`, null as any);
+
+        this.pendingGenerations++;
+        this.worker.postMessage({ type: "GENERATE", chunkX: x, chunkZ: z });
+      }
     }
 
     for (const [key, chunk] of this.loadedChunks.entries()) {
@@ -104,7 +168,8 @@ export class ChunkManager {
       const dz = Math.abs(chunk.z - playerChunkZ);
 
       if (dx > this.renderDistance + 1 || dz > this.renderDistance + 1) {
-        for (const buf of chunk.buffers) if (buf) buf.destroy();
+        this.freeChunkMemory(chunk);
+
         this.loadedChunks.delete(key);
         this.store.unloadChunk(chunk.x, chunk.z);
         this.worker.postMessage({
@@ -116,28 +181,30 @@ export class ChunkManager {
     }
   }
 
-  public draw(camera: FPCamera, elapsedTime: number, gameTime: GameTime, heldLightLevel: number) {
-    this.frustum.updateFromMatrix(camera.viewProjMatrix);
-
+  public draw(
+    camera: FPCamera,
+    elapsedTime: number,
+    gameTime: GameTime,
+    heldLightLevel: number,
+  ) {
     const visibleChunks: LoadedChunk[] = [];
 
     for (const chunk of this.loadedChunks.values()) {
       if (!chunk) continue;
-
-      const minX = chunk.x * 16;
-      const minZ = chunk.z * 16;
-
-      if (
-        this.frustum.intersectsBox(minX, 0, minZ, minX + 16, 128, minZ + 16)
-      ) {
         visibleChunks.push(chunk);
-      }
     }
-    this.renderer.drawMultiple(camera, elapsedTime, visibleChunks, gameTime, heldLightLevel);
+    this.renderer.drawMultiple(
+      camera,
+      elapsedTime,
+      visibleChunks,
+      gameTime,
+      heldLightLevel,
+    );
   }
 
   /** Asks the background worker to build a chunk */
   public requestChunk(x: number, z: number) {
+    this.pendingGenerations++;
     this.worker.postMessage({ type: "GENERATE", chunkX: x, chunkZ: z });
   }
 

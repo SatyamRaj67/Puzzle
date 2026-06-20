@@ -20,7 +20,12 @@ self.onmessage = (event: MessageEvent) => {
     store = new ChunkStore(terrain);
   }
 
-  const remeshAndSend = (cx: number, cz: number, rawData?: Uint8Array) => {
+  const remeshAndSend = (
+    cx: number,
+    cz: number,
+    rawData?: Uint8Array,
+    isGenerate: boolean = false,
+  ) => {
     if (!store.chunks.has(`${cx},${cz}`)) return;
 
     const meshData = GreedyMesher.mesh(store, cx, cz);
@@ -48,6 +53,7 @@ self.onmessage = (event: MessageEvent) => {
         vertices: buffersToSend,
         vertexCounts: meshData.vertexCounts,
         chunkData: rawData || null,
+        isGenerate: isGenerate,
       },
       transferList,
     );
@@ -69,7 +75,7 @@ self.onmessage = (event: MessageEvent) => {
     }
 
     const rawDataClone = store.getOrCreateChunk(chunkX, chunkZ).data.slice();
-    remeshAndSend(chunkX, chunkZ, rawDataClone);
+    remeshAndSend(chunkX, chunkZ, rawDataClone, true);
   }
 
   if (data.type === "MODIFY") {
@@ -80,25 +86,104 @@ self.onmessage = (event: MessageEvent) => {
       const lx = wx - chunkX * 16;
       const lz = wz - chunkZ * 16;
 
+      const oldBlockId = chunk.getBlock(lx, wy, lz);
+      const oldDef = BlockRegistry.getBlock(oldBlockId);
+      const newDef = BlockRegistry.getBlock(blockId);
+
+      const oldLightRaw = chunk.getLight(lx, wy, lz);
+      const oldBlkLight = oldLightRaw & 0xf;
+      const oldSunLight = (oldLightRaw >> 4) & 0xf;
+
       chunk.setBlock(lx, wy, lz, blockId);
 
-      for (let dx = -1; dx <= 1; dx++) {
-          for (let dz = -1; dz <= 1; dz++) {
-              LightingEngine.calculateChunk(store, chunkX + dx, chunkZ + dz);
+      const affectedChunks = new Set<string>();
+      affectedChunks.add(`${chunkX},${chunkZ}`);
+
+      if (newDef.isOpaque && !oldDef.isOpaque) {
+        store.setLight(wx, wy, wz, 0);
+        LightingEngine.removeLight(
+          store,
+          [wx, wy, wz, oldBlkLight],
+          false,
+          affectedChunks,
+        );
+        LightingEngine.removeLight(
+          store,
+          [wx, wy, wz, oldSunLight],
+          true,
+          affectedChunks,
+        );
+      } else if (!newDef.isOpaque && oldDef.isOpaque) {
+        store.setLight(wx, wy, wz, 0);
+
+        const addBlkQueue: number[] = [];
+        const addSunQueue: number[] = [];
+
+        if (wy + 1 < 128) {
+          const aboveLight = store.getLight(wx, wy + 1, wz);
+          if (aboveLight >> 4 === 15) {
+            store.setLight(wx, wy, wz, (15 << 4) | 0);
+            addSunQueue.push(wx, wy, wz);
           }
+        }
+
+        const dirs = [
+          [1, 0, 0],
+          [-1, 0, 0],
+          [0, 1, 0],
+          [0, -1, 0],
+          [0, 0, 1],
+          [0, 0, -1],
+        ];
+        for (const [dx, dy, dz] of dirs) {
+          const nx = wx + dx,
+            ny = wy + dy,
+            nz = wz + dz;
+          if (ny >= 0 && ny < 128) {
+            addBlkQueue.push(nx, ny, nz);
+            addSunQueue.push(nx, ny, nz);
+          }
+        }
+
+        if (addBlkQueue.length > 0)
+          LightingEngine.addLight(store, addBlkQueue, false, affectedChunks);
+        if (addSunQueue.length > 0)
+          LightingEngine.addLight(store, addSunQueue, true, affectedChunks);
       }
-      
-      remeshAndSend(chunkX, chunkZ);
 
-      if (lx === 0) remeshAndSend(chunkX - 1, chunkZ);
-      if (lx === 15) remeshAndSend(chunkX + 1, chunkZ);
-      if (lz === 0) remeshAndSend(chunkX, chunkZ - 1);
-      if (lz === 15) remeshAndSend(chunkX, chunkZ + 1);
+      const oldEmission = oldDef.lightEmission || 0;
+      const newEmission = newDef.lightEmission || 0;
 
-      if (lx === 0 && lz === 0) remeshAndSend(chunkX - 1, chunkZ - 1);
-      if (lx === 15 && lz === 0) remeshAndSend(chunkX + 1, chunkZ - 1);
-      if (lx === 0 && lz === 15) remeshAndSend(chunkX - 1, chunkZ + 1);
-      if (lx === 15 && lz === 15) remeshAndSend(chunkX + 1, chunkZ + 1);
+      if (newEmission > oldEmission) {
+        const curSun = (store.getLight(wx, wy, wz) >> 4) & 0xf;
+        store.setLight(wx, wy, wz, (curSun << 4) | newEmission);
+        LightingEngine.addLight(store, [wx, wy, wz], false, affectedChunks);
+      } else if (newEmission < oldEmission) {
+        LightingEngine.removeLight(
+          store,
+          [wx, wy, wz, oldEmission],
+          false,
+          affectedChunks,
+        );
+      }
+
+      if (lx === 0) affectedChunks.add(`${chunkX - 1},${chunkZ}`);
+      if (lx === 15) affectedChunks.add(`${chunkX + 1},${chunkZ}`);
+      if (lz === 0) affectedChunks.add(`${chunkX},${chunkZ - 1}`);
+      if (lz === 15) affectedChunks.add(`${chunkX},${chunkZ + 1}`);
+      if (lx === 0 && lz === 0)
+        affectedChunks.add(`${chunkX - 1},${chunkZ - 1}`);
+      if (lx === 15 && lz === 0)
+        affectedChunks.add(`${chunkX + 1},${chunkZ - 1}`);
+      if (lx === 0 && lz === 15)
+        affectedChunks.add(`${chunkX - 1},${chunkZ + 1}`);
+      if (lx === 15 && lz === 15)
+        affectedChunks.add(`${chunkX + 1},${chunkZ + 1}`);
+
+      for (const key of affectedChunks) {
+        const [cx, cz] = key.split(",").map(Number);
+        remeshAndSend(cx, cz);
+      }
     }
   }
 

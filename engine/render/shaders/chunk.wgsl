@@ -9,10 +9,6 @@ struct GlobalUniform {
     heldLight: f32,
 };
 
-struct FaceUnifrom {
-    face_dir: u32,
-};
-
 struct AnimData {
     data: array<vec4<f32>, 128>
 }
@@ -24,9 +20,6 @@ struct AnimData {
 @group(1) @binding(0) var atlas_sampler: sampler;
 @group(1) @binding(1) var atlas_texture: texture_2d<f32>;
 @group(1) @binding(2) var<uniform> anim_buffer: AnimData;
-
-// --- GROUP 2: Face Data ---
-@group(2) @binding(0) var<uniform> face: FaceUnifrom;
 
 struct VertexInput {
     @builtin(vertex_index) vertex_index: u32,
@@ -103,7 +96,8 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     let chunk_x = f32((d2 << 12u) >> 20u);
     let chunk_z = f32(d2 >> 20u);
 
-    let face_dir = face.face_dir;
+    let face_dir = (model.data3 >> 8u) & 0x1Fu;
+    
     let corner_index = (face_dir * 6u) + (model.vertex_index % 6u);
     var corner_offset = cube_corners[corner_index];
 

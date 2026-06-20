@@ -25,12 +25,8 @@ function getSharedPipelineConfig(gpu: GPUState): GPURenderPipelineDescriptor {
     ],
   });
 
-  const bindGroupLayout2 = gpu.device.createBindGroupLayout({
-    entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: {} }],
-  });
-
   const pipelineLayout = gpu.device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout0, bindGroupLayout1, bindGroupLayout2],
+    bindGroupLayouts: [bindGroupLayout0, bindGroupLayout1],
   });
 
   return {

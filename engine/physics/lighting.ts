@@ -50,11 +50,16 @@ export class LightingEngine {
       }
     }
 
-    this.propagate(store, this.lightQueue, false);
-    this.propagate(store, this.sunQueue, true);
+    this.addLight(store, this.lightQueue, false);
+    this.addLight(store, this.sunQueue, true);
   }
 
-  private static propagate(store: ChunkStore, queue: number[], isSun: boolean) {
+  public static addLight(
+    store: ChunkStore,
+    queue: number[],
+    isSun: boolean,
+    affectedChunks?: Set<string>,
+  ) {
     let head = 0;
 
     while (head < queue.length) {
@@ -79,11 +84,20 @@ export class LightingEngine {
 
         if (def.isOpaque) continue;
 
-        const finalStrength = Math.max(
-          0,
-          nextStrength - (def.lightAttenuation || 0),
-        );
-
+        let finalStrength = 0;
+        if (
+          isSun &&
+          dy === -1 &&
+          strength === 15 &&
+          (def.lightAttenuation || 0) === 0
+        ) {
+          finalStrength = 15;
+        } else {
+          finalStrength = Math.max(
+            0,
+            nextStrength - (def.lightAttenuation || 0),
+          );
+        }
         if (finalStrength <= 0) continue;
 
         const nRawLight = store.getLight(nx, ny, nz);
@@ -93,11 +107,61 @@ export class LightingEngine {
         if (isSun && finalStrength > nSun) {
           store.setLight(nx, ny, nz, (finalStrength << 4) | nBlk);
           queue.push(nx, ny, nz);
+          if (affectedChunks)
+            affectedChunks.add(`${Math.floor(nx / 16)},${Math.floor(nz / 16)}`);
         } else if (!isSun && finalStrength > nBlk) {
           store.setLight(nx, ny, nz, (nSun << 4) | finalStrength);
           queue.push(nx, ny, nz);
+          if (affectedChunks)
+            affectedChunks.add(`${Math.floor(nx / 16)},${Math.floor(nz / 16)}`);
         }
       }
+    }
+  }
+
+  public static removeLight(
+    store: ChunkStore,
+    queue: number[],
+    isSun: boolean,
+    affectedChunks?: Set<string>,
+  ) {
+    const addQueue: number[] = [];
+    let head = 0;
+
+    while (head < queue.length) {
+      const x = queue[head++];
+      const y = queue[head++];
+      const z = queue[head++];
+
+      const lightLevel = queue[head++];
+
+      for (const [dx, dy, dz] of this.dirs) {
+        const nx = x + dx,
+          ny = y + dy,
+          nz = z + dz;
+        if (ny < 0 || ny >= Chunk.HEIGHT) continue;
+
+        const neighborRaw = store.getLight(nx, ny, nz);
+        const neighborLight = isSun
+          ? (neighborRaw >> 4) & 0xf
+          : neighborRaw & 0xf;
+
+        if (neighborLight !== 0 && neighborLight < lightLevel) {
+          const newSun = isSun ? 0 : (neighborRaw >> 4) & 0xf;
+          const newBlk = isSun ? neighborRaw & 0xf : 0;
+          store.setLight(nx, ny, nz, (newSun << 4) | newBlk);
+
+          queue.push(nx, ny, nz, neighborLight);
+          if (affectedChunks)
+            affectedChunks.add(`${Math.floor(nx / 16)},${Math.floor(nz / 16)}`);
+        } else if (neighborLight >= lightLevel) {
+          addQueue.push(nx, ny, nz);
+        }
+      }
+    }
+
+    if (addQueue.length > 0) {
+      this.addLight(store, addQueue, isSun, affectedChunks);
     }
   }
 }

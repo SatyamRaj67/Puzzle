@@ -28,68 +28,98 @@ export class GreedyMesher {
             const def = BlockRegistry.getBlock(blockId);
             if (def.renderType === "CROSS") {
               const tex_d1 = def.textureIds[0];
-              const tex_d2 = def.textureIds[1] ?? tex_d1; // Fallback to d1 if no d2 exists
+              const tex_d2 = def.textureIds[1] ?? tex_d1;
 
               const data1_d1 = Format.packData1(x, y, z, tex_d1, 1, 1);
               const data1_d2 = Format.packData1(x, y, z, tex_d2, 1, 1);
-              const data2 = Format.packData2(0, chunkX, chunkZ); // AO is 0 for plants
 
-              // Push 6 vertices per face
+              const data2 = Format.packData2(0, chunkX, chunkZ);
+
+              const light = store.getLight(wx, y, wz);
+              const data3_f6 = Format.packData3(light, 6);
+              const data3_f7 = Format.packData3(light, 7);
+              const data3_f8 = Format.packData3(light, 8);
+              const data3_f9 = Format.packData3(light, 9);
+
               faces[6].push(
                 data1_d1,
                 data2,
+                data3_f6,
                 data1_d1,
                 data2,
+                data3_f6,
                 data1_d1,
                 data2,
+                data3_f6,
                 data1_d1,
                 data2,
+                data3_f6,
                 data1_d1,
                 data2,
+                data3_f6,
                 data1_d1,
                 data2,
+                data3_f6,
               );
               faces[7].push(
                 data1_d1,
                 data2,
+                data3_f7,
                 data1_d1,
                 data2,
+                data3_f7,
                 data1_d1,
                 data2,
+                data3_f7,
                 data1_d1,
                 data2,
+                data3_f7,
                 data1_d1,
                 data2,
+                data3_f7,
                 data1_d1,
                 data2,
+                data3_f7,
               );
               faces[8].push(
                 data1_d2,
                 data2,
+                data3_f8,
                 data1_d2,
                 data2,
+                data3_f8,
                 data1_d2,
                 data2,
+                data3_f8,
                 data1_d2,
                 data2,
+                data3_f8,
                 data1_d2,
                 data2,
+                data3_f8,
                 data1_d2,
                 data2,
+                data3_f8,
               );
               faces[9].push(
                 data1_d2,
                 data2,
+                data3_f9,
                 data1_d2,
                 data2,
+                data3_f9,
                 data1_d2,
                 data2,
+                data3_f9,
                 data1_d2,
                 data2,
+                data3_f9,
                 data1_d2,
                 data2,
+                data3_f9,
                 data1_d2,
                 data2,
+                data3_f9,
               );
             }
           }
@@ -360,12 +390,11 @@ export class GreedyMesher {
 
         const block = BlockRegistry.getBlock(blockId);
         const tex_id = block.textureIds[faceId];
+        const targetFaceId = block.isFluid ? faceId + 10 : faceId;
 
         const data1 = Format.packData1(x, y, z, tex_id, w, h);
         const data2 = Format.packData2(ao, chunkX, chunkZ);
-        const data3 = Format.packData3(light);
-
-        const targetFaceId = block.isFluid ? faceId + 10 : faceId;
+        const data3 = Format.packData3(light, targetFaceId);
 
         faces[targetFaceId].push(
           data1,

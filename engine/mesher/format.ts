@@ -53,7 +53,7 @@ export class Format {
    * [0-7] SunLight & BlockLight,
    * [8-31] Reserved
    */
-  public static packData3(light: number): number {
-    return light & 0xff;
+  public static packData3(light: number, faceId: number): number {
+    return (light & 0xff) | ((faceId & 0x1f) <<8);
   }
 }
