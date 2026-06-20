@@ -144,7 +144,7 @@ fn vs_main(model: VertexInput) -> VertexOutput {
 
     let final_illumination = max(torch_color, sun_color);
 
-    let base_ambient = vec3<f32>(0.02, 0.02, 0.03);
+    let base_ambient = vec3<f32>(0.1, 0.1, 0.2);
 
    out.shade = face_shading[face_dir] * ao_multiplier;
    out.sky_tint = final_illumination + base_ambient;

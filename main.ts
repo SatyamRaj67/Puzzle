@@ -79,7 +79,7 @@ async function bootstrap() {
     });
 
     document.getElementById("btn-set-noon")?.addEventListener("click", () => {
-      gameTime.timeOfDay = 0.5;
+      gameTime.timeOfDay = 1.0;
     });
 
     camera.position[0] = 8;

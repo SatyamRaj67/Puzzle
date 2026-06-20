@@ -5,13 +5,25 @@ import { AO } from "./ao";
 import { Format } from "./format";
 import type { ChunkMesh } from "./types";
 
+const MAX_VERTICES: number = 100000;
+const faceBuffers = Array.from(
+  {
+    length: 16,
+  },
+  () => new Uint32Array(MAX_VERTICES * 3),
+);
+const faceCounts = new Uint32Array(16);
+
+const mask0 = new Int32Array(Chunk.WIDTH * Chunk.HEIGHT);
+const mask1 = new Int32Array(Chunk.WIDTH * Chunk.HEIGHT);
+
 export class GreedyMesher {
   public static mesh(
     store: ChunkStore,
     chunkX: number,
     chunkZ: number,
   ): ChunkMesh {
-    const faces: number[][] = Array.from({ length: 16 }, () => []);
+    faceCounts.fill(0);
 
     const startX = chunkX * Chunk.WIDTH;
     const startZ = chunkZ * Chunk.DEPTH;
@@ -36,91 +48,11 @@ export class GreedyMesher {
               const data2 = Format.packData2(0, chunkX, chunkZ);
 
               const light = store.getLight(wx, y, wz);
-              const data3_f6 = Format.packData3(light, 6);
-              const data3_f7 = Format.packData3(light, 7);
-              const data3_f8 = Format.packData3(light, 8);
-              const data3_f9 = Format.packData3(light, 9);
 
-              faces[6].push(
-                data1_d1,
-                data2,
-                data3_f6,
-                data1_d1,
-                data2,
-                data3_f6,
-                data1_d1,
-                data2,
-                data3_f6,
-                data1_d1,
-                data2,
-                data3_f6,
-                data1_d1,
-                data2,
-                data3_f6,
-                data1_d1,
-                data2,
-                data3_f6,
-              );
-              faces[7].push(
-                data1_d1,
-                data2,
-                data3_f7,
-                data1_d1,
-                data2,
-                data3_f7,
-                data1_d1,
-                data2,
-                data3_f7,
-                data1_d1,
-                data2,
-                data3_f7,
-                data1_d1,
-                data2,
-                data3_f7,
-                data1_d1,
-                data2,
-                data3_f7,
-              );
-              faces[8].push(
-                data1_d2,
-                data2,
-                data3_f8,
-                data1_d2,
-                data2,
-                data3_f8,
-                data1_d2,
-                data2,
-                data3_f8,
-                data1_d2,
-                data2,
-                data3_f8,
-                data1_d2,
-                data2,
-                data3_f8,
-                data1_d2,
-                data2,
-                data3_f8,
-              );
-              faces[9].push(
-                data1_d2,
-                data2,
-                data3_f9,
-                data1_d2,
-                data2,
-                data3_f9,
-                data1_d2,
-                data2,
-                data3_f9,
-                data1_d2,
-                data2,
-                data3_f9,
-                data1_d2,
-                data2,
-                data3_f9,
-                data1_d2,
-                data2,
-                data3_f9,
-              );
+              this.pushQuad(6, data1_d1, data2, Format.packData3(light, 6));
+              this.pushQuad(7, data1_d1, data2, Format.packData3(light, 7));
+              this.pushQuad(8, data1_d2, data2, Format.packData3(light, 8));
+              this.pushQuad(9, data1_d2, data2, Format.packData3(light, 9));
             }
           }
         }
@@ -131,8 +63,8 @@ export class GreedyMesher {
     // Slice = Z. Plane = X (u) and Y (v)
     for (let z = 0; z < Chunk.DEPTH; z++) {
       const wz = startZ + z;
-      const mask0 = new Int32Array(Chunk.WIDTH * Chunk.HEIGHT);
-      const mask1 = new Int32Array(Chunk.WIDTH * Chunk.HEIGHT);
+      mask0.fill(0);
+      mask1.fill(0);
 
       for (let y = 0; y < Chunk.HEIGHT; y++) {
         const wy = y;
@@ -159,36 +91,16 @@ export class GreedyMesher {
           }
         }
       }
-      this.sweep(
-        mask0,
-        0,
-        z,
-        Chunk.WIDTH,
-        Chunk.HEIGHT,
-        0,
-        faces,
-        chunkX,
-        chunkZ,
-      );
-      this.sweep(
-        mask1,
-        1,
-        z,
-        Chunk.WIDTH,
-        Chunk.HEIGHT,
-        0,
-        faces,
-        chunkX,
-        chunkZ,
-      );
+      this.sweep(mask0, 0, z, Chunk.WIDTH, Chunk.HEIGHT, 0, chunkX, chunkZ);
+      this.sweep(mask1, 1, z, Chunk.WIDTH, Chunk.HEIGHT, 0, chunkX, chunkZ);
     }
 
     // --- Y AXIS (Faces 2: Y+, 3: Y-) ---
     // Slice = Y. Plane = X (u) and Z (v)
     for (let y = 0; y < Chunk.HEIGHT; y++) {
       const wy = y;
-      const mask2 = new Int32Array(Chunk.WIDTH * Chunk.DEPTH);
-      const mask3 = new Int32Array(Chunk.WIDTH * Chunk.DEPTH);
+      mask0.fill(0);
+      mask1.fill(0);
 
       for (let z = 0; z < Chunk.DEPTH; z++) {
         const wz = startZ + z;
@@ -204,47 +116,27 @@ export class GreedyMesher {
             if (BlockRegistry.shouldRenderFace(blockId, neighborYPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 2);
               const light = store.getLight(wx, wy + 1, wz);
-              mask2[z * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
+              mask0[z * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
             }
             const neighborYMinus = store.getBlock(wx, wy - 1, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborYMinus)) {
               const ao = AO.compute(store, wx, wy, wz, 3);
               const light = store.getLight(wx, wy - 1, wz);
-              mask3[z * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
+              mask1[z * Chunk.WIDTH + x] = blockId | (ao << 16) | (light << 24);
             }
           }
         }
       }
-      this.sweep(
-        mask2,
-        2,
-        y,
-        Chunk.WIDTH,
-        Chunk.DEPTH,
-        1,
-        faces,
-        chunkX,
-        chunkZ,
-      );
-      this.sweep(
-        mask3,
-        3,
-        y,
-        Chunk.WIDTH,
-        Chunk.DEPTH,
-        1,
-        faces,
-        chunkX,
-        chunkZ,
-      );
+      this.sweep(mask0, 2, y, Chunk.WIDTH, Chunk.DEPTH, 1, chunkX, chunkZ);
+      this.sweep(mask1, 3, y, Chunk.WIDTH, Chunk.DEPTH, 1, chunkX, chunkZ);
     }
 
     // --- X AXIS (Faces 4: X+, 5: X-) ---
     // Slice = X. Plane = Z (u) and Y (v)
     for (let x = 0; x < Chunk.WIDTH; x++) {
       const wx = startX + x;
-      const mask4 = new Int32Array(Chunk.HEIGHT * Chunk.DEPTH);
-      const mask5 = new Int32Array(Chunk.HEIGHT * Chunk.DEPTH);
+      mask0.fill(0);
+      mask1.fill(0);
 
       for (let y = 0; y < Chunk.HEIGHT; y++) {
         const wy = y;
@@ -260,45 +152,67 @@ export class GreedyMesher {
             if (BlockRegistry.shouldRenderFace(blockId, neighborXPlus)) {
               const ao = AO.compute(store, wx, wy, wz, 4);
               const light = store.getLight(wx + 1, wy, wz);
-              mask4[y * Chunk.DEPTH + z] = blockId | (ao << 16) | (light << 24);
+              mask0[y * Chunk.DEPTH + z] = blockId | (ao << 16) | (light << 24);
             }
             const neighborXMinus = store.getBlock(wx - 1, wy, wz);
             if (BlockRegistry.shouldRenderFace(blockId, neighborXMinus)) {
               const ao = AO.compute(store, wx, wy, wz, 5);
               const light = store.getLight(wx - 1, wy, wz);
-              mask5[y * Chunk.DEPTH + z] = blockId | (ao << 16) | (light << 24);
+              mask1[y * Chunk.DEPTH + z] = blockId | (ao << 16) | (light << 24);
             }
           }
         }
       }
-      this.sweep(
-        mask4,
-        4,
-        x,
-        Chunk.DEPTH,
-        Chunk.HEIGHT,
-        2,
-        faces,
-        chunkX,
-        chunkZ,
-      );
-      this.sweep(
-        mask5,
-        5,
-        x,
-        Chunk.DEPTH,
-        Chunk.HEIGHT,
-        2,
-        faces,
-        chunkX,
-        chunkZ,
-      );
+      this.sweep(mask0, 4, x, Chunk.DEPTH, Chunk.HEIGHT, 2, chunkX, chunkZ);
+      this.sweep(mask1, 5, x, Chunk.DEPTH, Chunk.HEIGHT, 2, chunkX, chunkZ);
+    }
+    const finalVertices: Uint32Array[] = [];
+    const finalCounts: number[] = [];
+
+    for (let i = 0; i < 16; i++) {
+      const uintCount = faceCounts[i];
+      finalCounts.push(uintCount / 3);
+
+      if (uintCount > 0) {
+        finalVertices.push(faceBuffers[i].slice(0, uintCount));
+      } else {
+        finalVertices.push(new Uint32Array(0));
+      }
     }
 
     return {
-      vertices: faces.map((arr) => new Uint32Array(arr)),
-      vertexCounts: faces.map((arr) => arr.length / 3),
+      vertices: finalVertices,
+      vertexCounts: finalCounts,
     };
+  }
+
+  private static pushQuad(faceId: number, d1: number, d2: number, d3: number) {
+    const buf = faceBuffers[faceId];
+    let ptr = faceCounts[faceId];
+
+    // Triangle 1
+    buf[ptr++] = d1;
+    buf[ptr++] = d2;
+    buf[ptr++] = d3;
+    buf[ptr++] = d1;
+    buf[ptr++] = d2;
+    buf[ptr++] = d3;
+    buf[ptr++] = d1;
+    buf[ptr++] = d2;
+    buf[ptr++] = d3;
+
+    // Triangle 2
+    buf[ptr++] = d1;
+    buf[ptr++] = d2;
+    buf[ptr++] = d3;
+    buf[ptr++] = d1;
+    buf[ptr++] = d2;
+    buf[ptr++] = d3;
+    buf[ptr++] = d1;
+    buf[ptr++] = d2;
+    buf[ptr++] = d3;
+
+    faceCounts[faceId] = ptr;
   }
 
   /**
@@ -311,7 +225,6 @@ export class GreedyMesher {
     maxU: number,
     maxV: number,
     axis: number,
-    faces: number[][],
     chunkX: number,
     chunkZ: number,
   ) {
@@ -394,28 +307,9 @@ export class GreedyMesher {
 
         const data1 = Format.packData1(x, y, z, tex_id, w, h);
         const data2 = Format.packData2(ao, chunkX, chunkZ);
-        const data3 = Format.packData3(light, targetFaceId);
+        const data3 = Format.packData3(light, faceId);
 
-        faces[targetFaceId].push(
-          data1,
-          data2,
-          data3,
-          data1,
-          data2,
-          data3,
-          data1,
-          data2,
-          data3,
-          data1,
-          data2,
-          data3,
-          data1,
-          data2,
-          data3,
-          data1,
-          data2,
-          data3,
-        );
+        this.pushQuad(targetFaceId, data1, data2, data3);
 
         for (let j = 0; j < h; j++) {
           for (let i = 0; i < w; i++) {

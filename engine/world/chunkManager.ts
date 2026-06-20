@@ -20,7 +20,7 @@ export class ChunkManager {
   public loadedChunks: Map<string, LoadedChunk> = new Map();
   private pendingGenerations = 0;
 
-  public renderDistance: number = 32; // Generates 9x9 grid
+  public renderDistance: number = 4; // Generates 9x9 grid
   private unloadRadius: number = this.renderDistance + 4;
 
   private lastPlayerChunkX: number | null = null;
@@ -47,27 +47,13 @@ export class ChunkManager {
 
       if (data.type === "DONE") {
         if (data.isGenerate) this.pendingGenerations--;
-
         if (data.chunkData) {
           this.store.setChunkData(data.chunkX, data.chunkZ, data.chunkData);
         }
 
-        let opaqueVertexCount = 0;
-        for (let i = 0; i < 10; i++) {
-          opaqueVertexCount += data.vertexCounts[i];
-        }
-
         let opaqueOffset: number | null = null;
-        if (opaqueVertexCount > 0) {
-          const opaqueData = new Uint32Array(opaqueVertexCount * 3);
-          let ptr = 0;
-
-          for (let i = 0; i < 10; i++) {
-            const faceData = new Uint32Array(data.vertices[i]);
-            opaqueData.set(faceData, ptr);
-            ptr += faceData.length;
-          }
-
+        if (data.opaqueVertexCount > 0 && data.opaqueBuffer) {
+          const opaqueData = new Uint32Array(data.opaqueBuffer);
           opaqueOffset = this.renderer.opaqueArena.allocate(
             opaqueData.byteLength,
           );
@@ -78,22 +64,9 @@ export class ChunkManager {
           );
         }
 
-        let transVertexCount = 0;
-        for (let i = 10; i < 16; i++) {
-          transVertexCount += data.vertexCounts[i];
-        }
-
         let translucentOffset: number | null = null;
-        if (transVertexCount > 0) {
-          const transData = new Uint32Array(transVertexCount * 3);
-          let ptr = 0;
-
-          for (let i = 10; i < 16; i++) {
-            const faceData = new Uint32Array(data.vertices[i]);
-            transData.set(faceData, ptr);
-            ptr += faceData.length;
-          }
-
+        if (data.transVertexCount > 0 && data.transBuffer) {
+          const transData = new Uint32Array(data.transBuffer);
           translucentOffset = this.renderer.translucentArena.allocate(
             transData.byteLength,
           );
@@ -108,15 +81,13 @@ export class ChunkManager {
         const existing = this.loadedChunks.get(key);
         if (existing) this.freeChunkMemory(existing);
 
-        const chunkMesh: ChunkMesh = {
-          vertices: [],
-          vertexCounts: [opaqueVertexCount, transVertexCount],
-        };
-
         this.loadedChunks.set(key, {
           x: data.chunkX,
           z: data.chunkZ,
-          mesh: chunkMesh,
+          mesh: {
+            vertices: [],
+            vertexCounts: [data.opaqueVertexCount, data.transVertexCount],
+          },
           opaqueOffset,
           translucentOffset,
         });
