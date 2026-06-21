@@ -43,8 +43,19 @@ export const BlockData: BlockDefinition[] = [
     icon: "/Puzzle/textures/icon/stone.png",
   },
   {
+    name: "cobblestone",
+    texture: "/Puzzle/textures/model/cobblestone.png",
+    icon: "/Puzzle/textures/icon/cobblestone.png"
+  },
+  {
+    name: "mossy_cobblestone",
+    texture: "/Puzzle/textures/model/mossy_cobblestone.png",
+    icon: "/Puzzle/textures/icon/mossy_cobblestone.png"
+  },
+  {
     name: "water",
     texture: "/Puzzle/textures/model/water_still.png",
+    icon: "/Puzzle/textures/icon/water_bucket.png",
     frames: 32,
     speed: 16,
     isFluid: true,
@@ -72,6 +83,11 @@ export const BlockData: BlockDefinition[] = [
     icon: "/Puzzle/textures/icon/oak_leaves.png",
     lightAttenuation: 4, 
     isOpaque: false,
+  },
+  {
+    name: "oak_planks",
+    texture: "/Puzzle/textures/model/oak_planks.png",
+    icon: "/Puzzle/textures/icon/oak_planks.png",
   },
   {
     name: "grass",

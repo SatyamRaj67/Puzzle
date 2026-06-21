@@ -5,6 +5,7 @@ import { initWebGPU } from "./engine/gpu/device";
 import { Raycaster } from "./engine/physics/raycast";
 import { FPCamera } from "./engine/render/camera/fpCamera";
 import { Renderer } from "./engine/render/renderer";
+import { WorldDB } from "./engine/storage/db";
 import { UI } from "./engine/ui/ui";
 import { BlockRegistry } from "./engine/world/blockRegistry";
 import { ChunkManager } from "./engine/world/chunkManager";
@@ -82,8 +83,20 @@ async function bootstrap() {
       gameTime.timeOfDay = 1.0;
     });
 
+    const resetBtn = document.getElementById("btn-reset-world")! as HTMLButtonElement;
+    resetBtn.addEventListener("click", async () => {
+      const confirmWipe = confirm("⚠️ Are you sure you want to delete the entire world? This cannot be undone.");
+      if (confirmWipe) {
+        resetBtn.innerText = "Wiping...";
+        (resetBtn).disabled = true;
+
+        await WorldDB.clearWorld();
+        window.location.reload();
+      }
+    })
+
     camera.position[0] = 8;
-    camera.position[1] = 45;
+    camera.position[1] = 128;
     camera.position[2] = 25;
 
     window.addEventListener("resize", () => {

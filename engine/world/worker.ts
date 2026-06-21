@@ -1,6 +1,7 @@
 import { GreedyMesher } from "../mesher/greedyMesher";
 import { LightingEngine } from "../physics/lighting";
 import { WorldDB } from "../storage/db";
+import { BiomeDecorator } from "../worldgen/decorator";
 import { TerrainGenerator } from "../worldgen/terrain";
 import { BlockRegistry } from "./blockRegistry";
 import { ChunkStore } from "./chunkStore";
@@ -124,11 +125,14 @@ async function handleMessage(data: any) {
             if (savedData) {
               chunk.data.set(savedData);
             } else {
+              terrain.generateChunk(chunk, nx, nz);
               await WorldDB.saveChunk(nx, nz, chunk.data);
             }
           }
         }
       }
+
+      BiomeDecorator.decorateChunk(store, chunkX, chunkZ);
 
       for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {

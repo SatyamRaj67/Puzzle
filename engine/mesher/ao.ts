@@ -9,8 +9,7 @@ export class AO {
     wz: number,
   ): boolean {
     const id = store.getBlock(wx, wy, wz);
-    if (id === 0) return false;
-    return BlockRegistry.getBlock(id).lightAttenuation > 0;
+    return BlockRegistry.getBlock(id).isOpaque;
   }
 
   /** * Voxel AO Curve:

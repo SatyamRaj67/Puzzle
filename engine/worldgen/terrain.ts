@@ -3,12 +3,13 @@ import { Chunk } from "../world/chunk";
 import { Noise2D } from "./noise";
 
 export class TerrainGenerator {
-  private noise: Noise2D;
-
-  private readonly WATER_LEVEL = 30;
+  private continentNoise: Noise2D;
+  private erosionNoise: Noise2D;
+  private readonly WATER_LEVEL = 40;
 
   constructor(seed: number = 1337) {
-    this.noise = new Noise2D(seed);
+    this.continentNoise = new Noise2D(seed);
+    this.erosionNoise = new Noise2D(seed + 1);
   }
 
   public generateChunk(chunk: Chunk, chunkX: number, chunkZ: number): void {
@@ -17,31 +18,27 @@ export class TerrainGenerator {
         const worldX = chunkX * Chunk.WIDTH + x;
         const worldZ = chunkZ * Chunk.DEPTH + z;
 
-        let heightValue = 0;
-        let amplitude = 20;
-        let frequency = 0.02;
-
-        // Layer 1: Base Mountains
-        heightValue +=
-          this.noise.get(worldX * frequency, worldZ * frequency) * amplitude;
-
-        // Layer 2: Small bumps/details
-        heightValue +=
-          this.noise.get(worldX * frequency * 4, worldZ * frequency * 4) *
-          (amplitude / 4);
-
-        const surfaceHeight = Math.floor(heightValue) + 25; // Base height offset
+        let continent =
+          (this.continentNoise.get(worldX * 0.003, worldZ * 0.003) + 1) / 2;
+        let erosion =
+          (this.erosionNoise.get(worldX * 0.015, worldZ * 0.015) + 1) / 2;
+        const elevationFactor = Math.pow(continent, 3.0);
+        const surfaceHeight = Math.floor(
+          30 + elevationFactor * 80 + erosion * 20,
+        );
 
         for (let y = 0; y < Chunk.HEIGHT; y++) {
-          if (y < surfaceHeight - 3) {
-            chunk.setBlock(x, y, z, BlockRegistry.getId("stone"));
-          } else if (y < surfaceHeight) {
-            chunk.setBlock(x, y, z, BlockRegistry.getId("dirt"));
+          if (y > surfaceHeight) {
+            if (y <= this.WATER_LEVEL)
+              chunk.setBlock(x, y, z, BlockRegistry.getId("water"));
           } else if (y === surfaceHeight) {
-            if (y < this.WATER_LEVEL) chunk.setBlock(x, y, z, BlockRegistry.getId("dirt"));
+            if (y < this.WATER_LEVEL + 2)
+              chunk.setBlock(x, y, z, BlockRegistry.getId("dirt"));
             else chunk.setBlock(x, y, z, BlockRegistry.getId("grass_block"));
-          } else if (y < this.WATER_LEVEL) {
-            chunk.setBlock(x, y, z, BlockRegistry.getId("water"));
+          } else if (y > surfaceHeight - 4) {
+            chunk.setBlock(x, y, z, BlockRegistry.getId("dirt"));
+          } else {
+            chunk.setBlock(x, y, z, BlockRegistry.getId("stone"));
           }
         }
       }
