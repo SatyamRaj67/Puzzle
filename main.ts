@@ -80,7 +80,7 @@ async function bootstrap() {
     });
 
     document.getElementById("btn-set-noon")?.addEventListener("click", () => {
-      gameTime.timeOfDay = 1.0;
+      gameTime.timeOfDay = 0.5;
     });
 
     const resetBtn = document.getElementById("btn-reset-world")! as HTMLButtonElement;
